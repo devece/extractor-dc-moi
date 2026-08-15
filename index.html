@@ -95,9 +95,11 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     body { background: #F0F2F5; margin: 0; padding: 24px; color: #1F2937; }
     .hidden { display: none !important; }
     .wrap { max-width: 1200px; margin: 0 auto; }
-    header { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; }
-    header h1 { font-size: 20px; margin: 0; color: var(--aba-blue); }
+    header { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 8px; margin-bottom: 20px; }
+    header img.logo { height: 48px; width: auto; object-fit: contain; }
+    header h1 { font-size: 28px; margin: 0; color: var(--aba-blue); }
     header .sub { font-size: 13px; color: var(--aba-gray); }
+    header .dev { font-size: 12px; color: #9CA3AF; margin-top: 2px; }
     .card { background: #fff; border-radius: 10px; border: 1px solid var(--aba-border); padding: 20px; margin-bottom: 16px; box-shadow: 0 1px 2px rgba(0,0,0,.04); }
 
     .drop { border: 2px dashed #D1D5DB; border-radius: 10px; padding: 36px 20px; text-align: center; cursor: pointer; transition: .15s; }
@@ -161,11 +163,10 @@ https://github.com/nodeca/pako/blob/main/LICENSE
 <body>
 <div class="wrap">
     <header>
-        <div style="font-size:26px;">📄</div>
-        <div>
-            <h1>Extractor DC + MOI</h1>
-            <div class="sub">Sube el Detalle Comercial (PDF), ingresa los precios del contratista y el MOI de cada categoría se calcula solo.</div>
-        </div>
+        <img class="logo" src="logo-abastible.png" alt="Abastible" onerror="this.style.display='none'">
+        <h1>Extractor DC + MOI</h1>
+        <div class="sub">Sube el Detalle Comercial (PDF), ingresa los precios del contratista y el MOI de cada categoría se calcula solo.</div>
+        <div class="dev">Desarrollador: Daniel Villalobos</div>
     </header>
 
     <div class="card" id="cardUpload">
