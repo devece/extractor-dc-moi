@@ -188,15 +188,15 @@ https://github.com/nodeca/pako/blob/main/LICENSE
             <div class="manual-sub">Extractor DC + MOI — pasos para cuadrar el precio contratista de un Detalle Comercial.</div>
             <ol>
                 <li><b>1. Sube el PDF del Detalle Comercial (DC)</b> de Abastible arrastrándolo o haciendo clic en el recuadro de carga.</li>
-                <li><b>2. Esperá el análisis por IA</b> (30-60 segundos): extrae automáticamente los ítems, su categoría y el precio Renova de cada uno.</li>
-                <li><b>3. Ingresá el precio contratista</b> de cada ítem en la tabla. Las cañerías son la excepción: siempre usan el precio Renova fijo, no editable.</li>
-                <li><b>4. El MOI de cada categoría se calcula solo</b>, a medida que cargás los precios contratista.</li>
+                <li><b>2. Espera el análisis por IA</b> (30-60 segundos): extrae automáticamente los ítems, su categoría y el precio Renova de cada uno.</li>
+                <li><b>3. Ingresa el precio contratista</b> de cada ítem en la tabla. Las cañerías son la excepción: siempre usan el precio Renova fijo, no editable.</li>
+                <li><b>4. El MOI de cada categoría se calcula solo</b>, a medida que cargas los precios contratista.</li>
                 <li><b>5. El material Impovar de cañerías se agrega automático</b>, calculado desde <code>impovar.xlsx</code> según diámetro y tira (6 m / 18 m) de cada producto.</li>
-                <li><b>6. Ítems libres y borrado:</b> podés agregar un ítem libre en cualquier categoría (botón "➕ Ítem libre en...") o borrar cualquier ítem con 🗑️, incluido un MOI ya asignado por el DC si ese monto no corresponde sumarlo de nuevo.</li>
+                <li><b>6. Ítems libres y borrado:</b> puedes agregar un ítem libre en cualquier categoría (botón "➕ Ítem libre en...") o borrar cualquier ítem con 🗑️, incluido un MOI ya asignado por el DC si ese monto no corresponde sumarlo de nuevo.</li>
                 <li><b>7. Servicio Compra Directa / Equipos Compra Directa</b> aparecen siempre disponibles en la tabla, aunque el DC no haya traído ítems ahí, para que se puedan completar después.</li>
                 <li><b>8. Sección RESERVA</b> (Equipos y Tanques de bodega): es informativa, no cuadra contra el contratista.</li>
-                <li><b>9. Generá el Excel "DC Final"</b> con el Sub-Total SOLPED, Sub-Total RESERVA y el Total Costo Proyecto, o usá "Exportar lista simple" si solo necesitás los ítems. "🔄 Nuevo DC" reinicia todo para cargar otro PDF.</li>
-                <li><b>10. Guardar y continuar después:</b> "💾 Guardar extracción" descarga todo el trabajo (ítems, precios, categorías) en un archivo .json. Se lo podés pasar a otra persona — por ejemplo, del contratista al vendedor para que sume Servicio/Equipos Compra Directa — y esa persona lo retoma con "📂 Cargar extracción (.json)" en la pantalla inicial, sin volver a subir el PDF.</li>
+                <li><b>9. Genera el Excel "DC Final"</b> con el Sub-Total SOLPED, Sub-Total RESERVA y el Total Costo Proyecto, o usa "Exportar lista simple" si solo necesitas los ítems. "🔄 Nuevo DC" reinicia todo para cargar otro PDF.</li>
+                <li><b>10. Guardar y continuar después:</b> "💾 Guardar extracción" descarga todo el trabajo (ítems, precios, categorías) en un archivo .json. Se lo puedes pasar a otra persona — por ejemplo, del contratista al vendedor para que sume Servicio/Equipos Compra Directa — y esa persona lo retoma con "📂 Cargar extracción (.json)" en la pantalla inicial, sin volver a subir el PDF.</li>
             </ol>
             <div class="manual-close"><button type="button" class="btn btn-outline" onclick="cerrarManual()">Cerrar</button></div>
         </div>
@@ -210,7 +210,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         </div>
         <input type="file" id="fileInput" accept=".pdf" style="display:none;" onchange="onFile(event)">
         <div style="text-align:center; margin-top:14px; font-size:13px; color:var(--aba-gray);">
-            ¿Ya tenés una extracción guardada (de vos o de otro colega)?
+            ¿Ya tienes una extracción guardada (tuya o de otro colega)?
             <button type="button" class="manual-link" style="margin:0 0 0 4px;" onclick="document.getElementById('fileInputJSON').click()">📂 Cargar extracción (.json)</button>
         </div>
         <input type="file" id="fileInputJSON" accept=".json" style="display:none;" onchange="cargarDC(event)">
@@ -244,7 +244,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
 
     <div class="card hidden" id="cardTabla">
         <div class="toolbar">
-            <div class="left">💡 El precio Contratista viene precargado igual al precio Base — edítalo por cada ítem. Los ítems marcados <span class="tag-moi">MOI</span> ya traen la mano de obra fijada en el DC (frecuente en Servicio Compra Directa) y se suman tal cual al MOI de su categoría — mantenlos salvo que sepas que ese monto ya quedó cubierto por otra vía; en ese caso puedes borrarlos con 🗑️. En Cañerías el precio contratista es siempre el Renova (no se edita) y el material Impovar se agrega solo, a precio fijo del repositorio. Para agregar una partida sin código Renova, usá "➕ Ítem libre" al final de la categoría que corresponda.</div>
+            <div class="left">💡 El precio Contratista viene precargado igual al precio Base — edítalo por cada ítem. Los ítems marcados <span class="tag-moi">MOI</span> ya traen la mano de obra fijada en el DC (frecuente en Servicio Compra Directa) y se suman tal cual al MOI de su categoría — mantenlos salvo que sepas que ese monto ya quedó cubierto por otra vía; en ese caso puedes borrarlos con 🗑️. En Cañerías el precio contratista es siempre el Renova (no se edita) y el material Impovar se agrega solo, a precio fijo del repositorio. Para agregar una partida sin código Renova, usa "➕ Ítem libre" al final de la categoría que corresponda.</div>
         </div>
         <div style="overflow-x:auto;">
             <table id="tablaItems"><tbody id="tbodyItems"></tbody></table>
@@ -474,7 +474,7 @@ function guardarDC() {
     a.click();
     a.remove();
     URL.revokeObjectURL(url);
-    toast('Extracción guardada — pasala como archivo .json a quien la vaya a continuar');
+    toast('Extracción guardada — pásala como archivo .json a quien la vaya a continuar');
 }
 
 function cargarDC(event) {
