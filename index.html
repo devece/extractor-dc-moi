@@ -99,7 +99,19 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     header img.logo { height: 48px; width: auto; object-fit: contain; }
     header h1 { font-size: 28px; margin: 0; color: var(--aba-blue); }
     header .sub { font-size: 13px; color: var(--aba-gray); }
-    header .dev { font-size: 12px; color: #9CA3AF; margin-top: 2px; }
+    header .dev { font-size: 14px; color: var(--aba-orange); font-weight: 700; margin-top: 2px; }
+    header .manual-link { margin-top: 6px; background: none; border: none; color: var(--aba-blue); font-size: 13px; font-weight: 600; text-decoration: underline; cursor: pointer; padding: 4px 8px; }
+    header .manual-link:hover { color: var(--aba-orange); }
+
+    .manual-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 1000; align-items: flex-start; justify-content: center; padding: 40px 16px; overflow-y: auto; }
+    .manual-overlay.show { display: flex; }
+    .manual-modal { background: #fff; border-radius: 12px; max-width: 640px; width: 100%; padding: 28px 30px; box-shadow: 0 10px 40px rgba(0,0,0,.2); }
+    .manual-modal h2 { color: var(--aba-blue); font-size: 20px; margin: 0 0 4px; }
+    .manual-modal .manual-sub { font-size: 13px; color: var(--aba-gray); margin-bottom: 18px; }
+    .manual-modal ol { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 14px; }
+    .manual-modal li { font-size: 14px; line-height: 1.5; color: #1F2937; }
+    .manual-modal li b { color: var(--aba-blue); }
+    .manual-modal .manual-close { margin-top: 22px; text-align: right; }
     .card { background: #fff; border-radius: 10px; border: 1px solid var(--aba-border); padding: 20px; margin-bottom: 16px; box-shadow: 0 1px 2px rgba(0,0,0,.04); }
 
     .drop { border: 2px dashed #D1D5DB; border-radius: 10px; padding: 36px 20px; text-align: center; cursor: pointer; transition: .15s; }
@@ -167,7 +179,26 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         <h1>Extractor DC + MOI</h1>
         <div class="sub">Sube el Detalle Comercial (PDF), ingresa los precios del contratista y el MOI de cada categoría se calcula solo.</div>
         <div class="dev">Desarrollador: Daniel Villalobos</div>
+        <button type="button" class="manual-link" onclick="abrirManual()">📖 Manual de uso</button>
     </header>
+
+    <div class="manual-overlay" id="manualOverlay" onclick="if(event.target===this) cerrarManual()">
+        <div class="manual-modal">
+            <h2>📖 Manual de uso</h2>
+            <div class="manual-sub">Extractor DC + MOI — pasos para cuadrar el precio contratista de un Detalle Comercial.</div>
+            <ol>
+                <li><b>1. Sube el PDF del Detalle Comercial (DC)</b> de Abastible arrastrándolo o haciendo clic en el recuadro de carga.</li>
+                <li><b>2. Esperá el análisis por IA</b> (30-60 segundos): extrae automáticamente los ítems, su categoría y el precio Renova de cada uno.</li>
+                <li><b>3. Ingresá el precio contratista</b> de cada ítem en la tabla. Las cañerías son la excepción: siempre usan el precio Renova fijo, no editable.</li>
+                <li><b>4. El MOI de cada categoría se calcula solo</b>, a medida que cargás los precios contratista.</li>
+                <li><b>5. El material Impovar de cañerías se agrega automático</b>, calculado desde <code>impovar.xlsx</code> según diámetro y tira (6 m / 18 m) de cada producto.</li>
+                <li><b>6. Ítems libres y borrado:</b> podés agregar un ítem libre en cualquier categoría (botón "➕ Ítem libre en...") o borrar cualquier ítem con 🗑️, incluido un MOI ya asignado por el DC si ese monto no corresponde sumarlo de nuevo.</li>
+                <li><b>7. Sección RESERVA</b> (Equipos y Tanques de bodega): es informativa, no cuadra contra el contratista.</li>
+                <li><b>8. Generá el Excel "DC Final"</b> con el Sub-Total SOLPED, Sub-Total RESERVA y el Total Costo Proyecto, o usá "Exportar lista simple" si solo necesitás los ítems. "🔄 Nuevo DC" reinicia todo para cargar otro PDF.</li>
+            </ol>
+            <div class="manual-close"><button type="button" class="btn btn-outline" onclick="cerrarManual()">Cerrar</button></div>
+        </div>
+    </div>
 
     <div class="card" id="cardUpload">
         <div class="drop" id="drop" onclick="document.getElementById('fileInput').click()">
@@ -415,6 +446,9 @@ function toast(msg) {
     document.body.appendChild(t);
     setTimeout(() => t.remove(), 2600);
 }
+
+function abrirManual() { $('manualOverlay').classList.add('show'); }
+function cerrarManual() { $('manualOverlay').classList.remove('show'); }
 
 // ── Drag & drop ─────────────────────────────────────────────────────────
 const dropEl = $('drop');
