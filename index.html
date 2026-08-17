@@ -1076,7 +1076,8 @@ async function generarDCFinalExcel() {
 
         sheet.columns = [
             { width: 10 }, { width: 12 }, { width: 38 }, { width: 7 },
-            { width: 9 }, { width: 13 }, { width: 14 }, { width: 20 }
+            { width: 9 }, { width: 13 }, { width: 14 }, { width: 20 },
+            { width: 14 }, { width: 14 }
         ];
 
         let r = 1;
@@ -1242,7 +1243,7 @@ async function generarDCFinalExcel() {
         // ── TABLAS POR CATEGORÍA ──
         for (const rc of resumenCats) {
             sheet.getRow(r).height = 17;
-            sheet.mergeCells(r, 1, r, 8);
+            sheet.mergeCells(r, 1, r, 10);
             const catT = sheet.getCell(r, 1);
             catT.value = rc.cat;
             catT.font = { name: 'Arial', bold: true, size: 10, color: { argb: C.white } };
@@ -1252,7 +1253,7 @@ async function generarDCFinalExcel() {
             // Verde) a veces la factura un certificador distinto del contratista principal.
             // CAÑERIAS muestra proveedor por el material Impovar (proveedor: 'IMPOVAR').
             const mostrarProveedor = rc.esSCD || rc.cat === 'NORMALIZACIONES' || CATS_CAÑERIA.includes(rc.cat);
-            const heads = ['OPERACIÓN', 'CÓDIGO', 'DESCRIPCIÓN', 'UN', 'CANT.', 'VALOR UNIT.', 'VALOR FINAL', mostrarProveedor ? 'PROVEEDOR' : ''];
+            const heads = ['OPERACIÓN', 'CÓDIGO', 'DESCRIPCIÓN', 'UN', 'CANT.', 'VALOR UNIT.', 'VALOR FINAL', mostrarProveedor ? 'PROVEEDOR' : '', 'P.UNIT. CONTRATISTA', 'TOTAL CONTRATISTA'];
             heads.forEach((h, i) => {
                 const c = sheet.getCell(r, i + 1); c.value = h;
                 c.font = { name: 'Arial', bold: true, size: 8, color: { argb: C.gray } };
@@ -1275,7 +1276,9 @@ async function generarDCFinalExcel() {
                     it.cantidad,
                     money(it.precioBase),
                     money(it.precioBase) * money(it.cantidad),
-                    mostrarProveedor ? (it.proveedor || '') : ''
+                    mostrarProveedor ? (it.proveedor || '') : '',
+                    money(it.precioCtta),
+                    money(it.precioCtta) * money(it.cantidad)
                 ];
                 fila.forEach((v, i) => {
                     const col = i + 1;
@@ -1287,11 +1290,12 @@ async function generarDCFinalExcel() {
                         ? { name: 'Arial', size: 9, italic: true, color: { argb: 'FF92400E' } }
                         : { name: 'Arial', size: 9 };
                     if (it.esImpovar) cell.fill = fillSolid('FFFFFBEB');
-                    if (col === 6 || col === 7) { cell.numFmt = MONEY; cell.alignment = { horizontal: 'right', vertical: 'middle' }; }
+                    if (col === 6 || col === 7 || col === 9 || col === 10) { cell.numFmt = MONEY; cell.alignment = { horizontal: 'right', vertical: 'middle' }; }
                     else if (col === 4 || col === 5 || col === 1) cell.alignment = { horizontal: 'center', vertical: 'middle' };
                     else cell.alignment = { horizontal: 'left', vertical: 'middle' };
                 });
                 sheet.getCell(r, 7).value = { formula: `F${r}*E${r}`, result: money(it.precioBase) * money(it.cantidad) };
+                sheet.getCell(r, 10).value = { formula: `I${r}*E${r}`, result: money(it.precioCtta) * money(it.cantidad) };
                 filasCat.push(r);
                 r++;
             }
@@ -1309,7 +1313,9 @@ async function generarDCFinalExcel() {
                     it.cantidad,
                     money(it.precioBase),
                     money(it.precioBase) * money(it.cantidad),
-                    mostrarProveedor ? (it.proveedor || '') : ''
+                    mostrarProveedor ? (it.proveedor || '') : '',
+                    money(it.precioBase),
+                    money(it.precioBase) * money(it.cantidad)
                 ];
                 fila.forEach((v, i) => {
                     const col = i + 1;
@@ -1317,11 +1323,12 @@ async function generarDCFinalExcel() {
                     cell.value = v; cell.border = gridBorder();
                     cell.font = { name: 'Arial', size: 9, italic: true, color: { argb: 'FF9A3412' } };
                     cell.fill = fillSolid('FFFFF7ED');
-                    if (col === 6 || col === 7) { cell.numFmt = MONEY; cell.alignment = { horizontal: 'right', vertical: 'middle' }; }
+                    if (col === 6 || col === 7 || col === 9 || col === 10) { cell.numFmt = MONEY; cell.alignment = { horizontal: 'right', vertical: 'middle' }; }
                     else if (col === 4 || col === 5 || col === 1) cell.alignment = { horizontal: 'center', vertical: 'middle' };
                     else cell.alignment = { horizontal: 'left', vertical: 'middle' };
                 });
                 sheet.getCell(r, 7).value = { formula: `F${r}*E${r}`, result: money(it.precioBase) * money(it.cantidad) };
+                sheet.getCell(r, 10).value = { formula: `I${r}*E${r}`, result: money(it.precioBase) * money(it.cantidad) };
                 filasCat.push(r);
                 r++;
             }
@@ -1332,7 +1339,7 @@ async function generarDCFinalExcel() {
                     ? 'MANO DE OBRA INDUSTRIAL (crédito — el contratista cotizó bajo el precio Renova)'
                     : 'MANO DE OBRA INDUSTRIAL (diferencia contratista vs. Renova)';
                 const oper = operacionSAPParaItem(rc.cat, 'MANO DE OBRA INDUSTRIAL', true); // línea sintética sin código propio: se mantiene el heurístico
-                const filaMOI = [oper, '', descMOI, 'ST', 1, money(rc.moiEditable), money(rc.moiEditable), ''];
+                const filaMOI = [oper, '', descMOI, 'ST', 1, money(rc.moiEditable), money(rc.moiEditable), '', '', ''];
                 filaMOI.forEach((v, i) => {
                     const col = i + 1;
                     const cell = sheet.getCell(r, col);
@@ -1358,6 +1365,13 @@ async function generarDCFinalExcel() {
             sv.numFmt = MONEY; sv.font = { name: 'Arial', bold: true, size: 9, color: { argb: C.blue } };
             sv.fill = fillSolid(C.blueL); sv.alignment = { horizontal: 'right', vertical: 'middle' }; sv.border = gridBorder();
             const sx = sheet.getCell(r, 8); sx.fill = fillSolid(C.blueL); sx.border = gridBorder();
+            const sx2 = sheet.getCell(r, 9); sx2.fill = fillSolid(C.blueL); sx2.border = gridBorder();
+            const svCtta = sheet.getCell(r, 10);
+            svCtta.value = filasCat.length
+                ? { formula: `SUM(${filasCat.map(fr => 'J' + fr).join(',')})`, result: rc.total }
+                : money(rc.total);
+            svCtta.numFmt = MONEY; svCtta.font = { name: 'Arial', bold: true, size: 9, color: { argb: C.blue } };
+            svCtta.fill = fillSolid(C.blueL); svCtta.alignment = { horizontal: 'right', vertical: 'middle' }; svCtta.border = gridBorder();
             sheet.getCell(filaResumenCat[rc.cat], 6).value = { formula: `G${r}`, result: rc.total };
             r += 2;
         }
