@@ -704,14 +704,14 @@ function renderTabla() {
 
     let html = `<thead><tr>
         <th>Código</th><th>Descripción</th><th>Unidad</th><th class="num">Cantidad</th>
-        <th class="num">Precio Base</th><th class="num">Precio Contratista</th><th class="num">Total Contratista</th><th></th>
+        <th class="num">Precio Base</th><th class="num">Total Renova</th><th class="num">Precio Contratista</th><th class="num">Total Contratista</th><th></th>
     </tr></thead><tbody id="tbodyItems">`;
 
     let totalBaseGeneral = 0, totalMoiGeneral = 0, totalCttaGeneral = 0;
 
     catsPresentes.forEach(cat => {
         const items = dc.items.filter(i => i.categoria === cat);
-        html += `<tr class="cat-header"><td colspan="8">${escapeHTML(cat)}</td></tr>`;
+        html += `<tr class="cat-header"><td colspan="9">${escapeHTML(cat)}</td></tr>`;
 
         let baseCat = 0, cttaCat = 0, moiDcCat = 0;
 
@@ -736,6 +736,7 @@ function renderTabla() {
                 <td>${escapeHTML(it.unidad)}</td>
                 <td class="num">${fmt(it.cantidad)}</td>
                 <td class="num">${fmtMoney(it.precioBase)}</td>
+                <td class="num">${fmtMoney(totalBaseItem)}</td>
                 <td class="num">${it.esMOI
                     ? '<span style="color:#9CA3AF;">— (MOI del DC)</span>'
                     : precioFijo
@@ -757,6 +758,7 @@ function renderTabla() {
                 <td><input type="text" id="libreUnidadInline" value="ST" style="width:100%; padding:5px 7px; border:1px solid var(--aba-border); border-radius:6px; font-size:13px;"></td>
                 <td class="num"><input type="text" id="libreCantidadInline" value="1" style="width:100%; padding:5px 7px; border:1px solid var(--aba-border); border-radius:6px; font-size:13px; text-align:right;"></td>
                 <td class="num" style="color:#9CA3AF;">—</td>
+                <td class="num" style="color:#9CA3AF;">—</td>
                 <td class="num"><input type="text" id="librePrecioInline" placeholder="0" style="width:100%; padding:5px 7px; border:1px solid var(--aba-border); border-radius:6px; font-size:13px; text-align:right;"></td>
                 <td colspan="2" style="white-space:nowrap;">
                     <button type="button" class="btn btn-primary" style="padding:5px 12px; font-size:12.5px;" onclick="agregarItemLibreEnCategoria('${cat.replace(/'/g, "\\'")}')">Agregar</button>
@@ -765,7 +767,7 @@ function renderTabla() {
             </tr>`;
         } else {
             html += `<tr>
-                <td colspan="8"><button type="button" class="btn-add-libre" onclick="mostrarItemLibreEnCategoria('${cat.replace(/'/g, "\\'")}')">➕ Ítem libre en ${escapeHTML(cat)}</button></td>
+                <td colspan="9"><button type="button" class="btn-add-libre" onclick="mostrarItemLibreEnCategoria('${cat.replace(/'/g, "\\'")}')">➕ Ítem libre en ${escapeHTML(cat)}</button></td>
             </tr>`;
         }
 
@@ -781,12 +783,13 @@ function renderTabla() {
         html += `<tr class="cat-subtotal">
             <td colspan="4" class="text-right" style="text-align:right;">Subtotal ${escapeHTML(cat)}</td>
             <td class="num">${fmtMoney(baseCat)}</td>
+            <td class="num">${fmtMoney(baseCat + moiDcCat)}</td>
             <td class="num" style="color:var(--moi-text);">MOI: ${fmtMoney(moiCat)}</td>
             <td class="num">${fmtMoney(cttaCat)}</td>
             <td></td>
         </tr>`;
         html += `<tr class="cat-moi ${moiCat < 0 ? 'neg' : ''}">
-            <td colspan="8" style="text-align:right;">
+            <td colspan="9" style="text-align:right;">
                 🛠️ MANO DE OBRA INDUSTRIAL — ${escapeHTML(cat)}: ${fmtMoney(moiCat)}
                 ${moiCat < 0 ? ' <span style="font-weight:400;font-size:11.5px;">(crédito — el DC ya asignó más MOI del que hace falta)</span>' : ''}
             </td>
