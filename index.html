@@ -348,6 +348,7 @@ function extraerDiametro(desc) {
 // no se sostuvo contra los 5 ítems de cañería del DC real usado para probar, así que se quita.)
 const ML_POR_TIRA_DEFAULT = 6;
 function calcularMetrosMaterial(metros, tira = ML_POR_TIRA_DEFAULT) {
+    if (metros % ML_POR_TIRA_DEFAULT === 0) return metros;
     return Math.ceil((metros * 1.05) / tira) * tira;
 }
 
@@ -407,13 +408,19 @@ function buscarMaterialImpovar(item, productos) {
     if (esCañeriaDeAcero(item.descripcion)) return null;
     const diametro = extraerDiametro(item.descripcion);
     if (!diametro) return null;
-    // Varios diámetros (ej. 1/2" y 3/8") tienen dos versiones en el catálogo Impovar: rollo
-    // de 18m y tira estándar de 6m, con precio y largo de tira distintos. Sin desambiguar por
-    // tipo, el primer match del diámetro ganaba siempre — en el DC real de prueba eso hacía
-    // que una instalación "ROLLO" terminara con el material de tira estándar equivocado.
-    const esRollo = /ROLLO/i.test(item.descripcion || '');
+    // Varios diámetros (ej. 1/2" y 3/8") tienen hasta tres versiones en el catálogo Impovar:
+    // tira estándar de 6m, rollo de 18m y cañería "protegida", con precio y largo de tira
+    // distintos. Sin desambiguar por tipo, el primer match del diámetro ganaba siempre — en el
+    // DC real de prueba eso hacía que una instalación "ROLLO" terminara con el material de tira
+    // estándar equivocado; lo mismo le pasaba a una instalación "PROTEGIDA" (quedaba con el
+    // precio de la tira estándar, sin aviso). Si el tipo del ítem no tiene contraparte exacta en
+    // el catálogo para ese diámetro, se cae a la tira estándar antes que a cualquier candidato.
+    const tipoCañeria = desc => /ROLLO/i.test(desc || '') ? 'rollo' : /PROTEGID/i.test(desc || '') ? 'protegida' : 'estandar';
+    const tipoItem = tipoCañeria(item.descripcion);
     const candidatos = productos.filter(p => p.categoria === item.categoria && p.diametro === diametro);
-    const mat = candidatos.find(p => /ROLLO/i.test(p.descripcion) === esRollo) || candidatos[0];
+    const mat = candidatos.find(p => tipoCañeria(p.descripcion) === tipoItem)
+        || candidatos.find(p => tipoCañeria(p.descripcion) === 'estandar')
+        || candidatos[0];
     if (!mat) return null;
     const metros = calcularMetrosMaterial(item.cantidad, mat.tira);
     return {
@@ -1038,10 +1045,14 @@ function operacionSAPParaItem(cat, descUp, esMOI) {
 // ítem que en realidad es 400 rompe la certificación. Para el resto de las categorías el código
 // extraído es un código de material/servicio (no la operación SAP), así que ahí sí se mantiene
 // el heurístico por categoría+descripción — es solo una sugerencia a verificar al digitar en SAP.
+// Algunos DC no traen una operación corta distinta para NORMALIZACIONES (columna "Operación"
+// igual a "Código", el mismo correlativo interno de hasta 19 dígitos) — si "código" viene con
+// más de 4 dígitos no es una operación real, y usarlo igual dejaría ese número gigante en la
+// columna OPERACIÓN del Excel; en ese caso se cae al mismo heurístico que el resto.
 function operacionParaLinea(cat, it, descUp, esMOI) {
     if (cat === 'NORMALIZACIONES') {
         const cod = String(it && it.codigo || '').replace(/\D/g, '');
-        if (cod) return cod.padStart(4, '0');
+        if (cod && cod.length <= 4) return cod.padStart(4, '0');
     }
     return operacionSAPParaItem(cat, descUp, esMOI);
 }
