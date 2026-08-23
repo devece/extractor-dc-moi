@@ -340,15 +340,12 @@ function extraerDiametro(desc) {
 // Impovar cotiza la cañería en tiras/rollos de largo fijo (6m para la mayoría de las
 // medidas, 18m para la familia "ROLLO 18 MTS" — el largo real está en la columna "TIRA o
 // ROLLO [Mt.]" de impovar.xlsx, por eso se recibe como parámetro en vez de asumir 6 fijo).
-// Validado con un DC real (Loteo Fundo Las Vertientes, 19565131): el redondeo SIEMPRE
-// aplica el 5% de excedente y sube al múltiplo del largo de tira superior, incluso cuando
-// la cantidad instalada ya es múltiplo exacto — ej. 6 ML instalados de una medida con tira
-// de 6m dieron 12 ML de material en el DC real, no 6. (Antes esta función tenía una
-// excepción que devolvía la cantidad sin cambios si ya era múltiplo exacto; esa excepción
-// no se sostuvo contra los 5 ítems de cañería del DC real usado para probar, así que se quita.)
+// Misma fórmula que NOTA_DE_VENTA.html: si el largo instalado ya es múltiplo exacto de la
+// tira, se entrega esa misma cantidad de material, sin excedente. Si no, se le suma el 5%
+// y se redondea hacia arriba al múltiplo de tira superior.
 const ML_POR_TIRA_DEFAULT = 6;
 function calcularMetrosMaterial(metros, tira = ML_POR_TIRA_DEFAULT) {
-    if (metros % ML_POR_TIRA_DEFAULT === 0) return metros;
+    if (metros % tira === 0) return metros;
     return Math.ceil((metros * 1.05) / tira) * tira;
 }
 
