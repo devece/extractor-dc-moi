@@ -432,7 +432,8 @@ function buscarMaterialImpovar(item, productos) {
         esMOI: false,
         esImpovar: true,
         proveedor: 'IMPOVAR',
-        idInstalacion: item.id
+        idInstalacion: item.id,
+        tira: mat.tira
     };
 }
 
@@ -1085,8 +1086,9 @@ async function generarDCFinalExcel() {
         sheet.columns = [
             { width: 10 }, { width: 12 }, { width: 38 }, { width: 7 },
             { width: 9 }, { width: 13 }, { width: 14 }, { width: 20 },
-            { width: 14 }, { width: 14 }
+            { width: 14 }, { width: 14 }, { width: 14 }
         ];
+        const AMARILLO_EDITABLE = 'FFFEF9C3';
 
         let r = 1;
         // ── TÍTULO ──
@@ -1250,8 +1252,10 @@ async function generarDCFinalExcel() {
 
         // ── TABLAS POR CATEGORÍA ──
         for (const rc of resumenCats) {
+            const esCañeriaCat = CATS_CAÑERIA.includes(rc.cat);
+
             sheet.getRow(r).height = 17;
-            sheet.mergeCells(r, 1, r, 10);
+            sheet.mergeCells(r, 1, r, 11);
             const catT = sheet.getCell(r, 1);
             catT.value = rc.cat;
             catT.font = { name: 'Arial', bold: true, size: 10, color: { argb: C.white } };
@@ -1260,8 +1264,8 @@ async function generarDCFinalExcel() {
             // NORMALIZACIONES también muestra proveedor: la certificación (código 400, Sello
             // Verde) a veces la factura un certificador distinto del contratista principal.
             // CAÑERIAS muestra proveedor por el material Impovar (proveedor: 'IMPOVAR').
-            const mostrarProveedor = rc.esSCD || rc.cat === 'NORMALIZACIONES' || CATS_CAÑERIA.includes(rc.cat);
-            const heads = ['OPERACIÓN', 'CÓDIGO', 'DESCRIPCIÓN', 'UN', 'CANT.', 'VALOR UNIT.', 'VALOR FINAL', mostrarProveedor ? 'PROVEEDOR' : '', 'P.UNIT. CONTRATISTA', 'TOTAL CONTRATISTA'];
+            const mostrarProveedor = rc.esSCD || rc.cat === 'NORMALIZACIONES' || esCañeriaCat;
+            const heads = ['OPERACIÓN', 'CÓDIGO', 'DESCRIPCIÓN', 'UN', 'CANT.', 'VALOR UNIT.', 'VALOR FINAL', mostrarProveedor ? 'PROVEEDOR' : '', 'P.UNIT. CONTRATISTA', 'TOTAL CONTRATISTA', 'DIFERENCIA'];
             heads.forEach((h, i) => {
                 const c = sheet.getCell(r, i + 1); c.value = h;
                 c.font = { name: 'Arial', bold: true, size: 8, color: { argb: C.gray } };
@@ -1271,17 +1275,23 @@ async function generarDCFinalExcel() {
             r++;
 
             const filasCat = [];
+            const filaInstalacionPorId = {}; // id del ítem de instalación de cañería → fila Excel, para la fórmula de material Impovar
 
             // Ítems normales (no MOI): precio Base = valor Renova/SAP de la línea.
             for (const it of rc.itemsNoMOI) {
                 const descUp = String(it.descripcion || '').toUpperCase();
                 const oper = operacionParaLinea(rc.cat, it, descUp, false);
+                // Instalación de cañería (no el material Impovar): el contratista puede
+                // corregir la cantidad instalada, pero el precio contratista sigue fijo
+                // = precio Renova (no se negocia), así que el Total no lo puede manipular.
+                const esInstalacionCañeria = esCañeriaCat && !it.esImpovar;
+                const cantidadEsFormula = it.esImpovar && it.idInstalacion && filaInstalacionPorId[it.idInstalacion];
                 const fila = [
                     oper,
                     String(it.codigo || '').replace(/^0+/, '') || '-',
                     (it.esImpovar ? '↳ MATERIAL — ' : '') + it.descripcion + (it.esLibre ? ' (ÍTEM LIBRE — SIN CÓDIGO RENOVA, VA AL MOI)' : ''),
                     it.unidad || 'ST',
-                    it.cantidad,
+                    cantidadEsFormula ? '' : it.cantidad,
                     money(it.precioBase),
                     money(it.precioBase) * money(it.cantidad),
                     mostrarProveedor ? (it.proveedor || '') : '',
@@ -1298,12 +1308,35 @@ async function generarDCFinalExcel() {
                         ? { name: 'Arial', size: 9, italic: true, color: { argb: 'FF92400E' } }
                         : { name: 'Arial', size: 9 };
                     if (it.esImpovar) cell.fill = fillSolid('FFFFFBEB');
-                    if (col === 6 || col === 7 || col === 9 || col === 10) { cell.numFmt = MONEY; cell.alignment = { horizontal: 'right', vertical: 'middle' }; }
+                    if (col === 6 || col === 7 || col === 9 || col === 10 || col === 11) { cell.numFmt = MONEY; cell.alignment = { horizontal: 'right', vertical: 'middle' }; }
                     else if (col === 4 || col === 5 || col === 1) cell.alignment = { horizontal: 'center', vertical: 'middle' };
                     else cell.alignment = { horizontal: 'left', vertical: 'middle' };
                 });
                 sheet.getCell(r, 7).value = { formula: `F${r}*E${r}`, result: money(it.precioBase) * money(it.cantidad) };
                 sheet.getCell(r, 10).value = { formula: `I${r}*E${r}`, result: money(it.precioCtta) * money(it.cantidad) };
+                sheet.getCell(r, 11).value = { formula: `J${r}-G${r}`, result: money(it.precioCtta) * money(it.cantidad) - money(it.precioBase) * money(it.cantidad) };
+                sheet.getCell(r, 11).numFmt = MONEY;
+                sheet.getCell(r, 11).alignment = { horizontal: 'right', vertical: 'middle' };
+
+                if (esInstalacionCañeria) {
+                    filaInstalacionPorId[it.id] = r;
+                    const cantCell = sheet.getCell(r, 5);
+                    cantCell.value = it.cantidad;
+                    cantCell.numFmt = '#,##0.00';
+                    cantCell.alignment = { horizontal: 'center', vertical: 'middle' };
+                    cantCell.fill = fillSolid(AMARILLO_EDITABLE);
+                    cantCell.protection = { locked: false };
+                    cantCell.note = 'Cantidad editable: si cambia el largo instalado, la fila de material Impovar de abajo se recalcula sola.';
+                }
+                if (cantidadEsFormula) {
+                    const filaInstal = filaInstalacionPorId[it.idInstalacion];
+                    const tira = it.tira || ML_POR_TIRA_DEFAULT;
+                    const cantCell = sheet.getCell(r, 5);
+                    cantCell.value = { formula: `IF(MOD(E${filaInstal},${tira})=0,E${filaInstal},CEILING(E${filaInstal}*1.05,${tira}))`, result: it.cantidad };
+                    cantCell.numFmt = '#,##0.00';
+                    cantCell.alignment = { horizontal: 'center', vertical: 'middle' };
+                    sheet.getCell(r, 7).value = { formula: `F${r}*E${r}`, result: money(it.precioBase) * money(it.cantidad) };
+                }
                 filasCat.push(r);
                 r++;
             }
@@ -1331,33 +1364,67 @@ async function generarDCFinalExcel() {
                     cell.value = v; cell.border = gridBorder();
                     cell.font = { name: 'Arial', size: 9, italic: true, color: { argb: 'FF9A3412' } };
                     cell.fill = fillSolid('FFFFF7ED');
-                    if (col === 6 || col === 7 || col === 9 || col === 10) { cell.numFmt = MONEY; cell.alignment = { horizontal: 'right', vertical: 'middle' }; }
+                    if (col === 6 || col === 7 || col === 9 || col === 10 || col === 11) { cell.numFmt = MONEY; cell.alignment = { horizontal: 'right', vertical: 'middle' }; }
                     else if (col === 4 || col === 5 || col === 1) cell.alignment = { horizontal: 'center', vertical: 'middle' };
                     else cell.alignment = { horizontal: 'left', vertical: 'middle' };
                 });
                 sheet.getCell(r, 7).value = { formula: `F${r}*E${r}`, result: money(it.precioBase) * money(it.cantidad) };
                 sheet.getCell(r, 10).value = { formula: `I${r}*E${r}`, result: money(it.precioBase) * money(it.cantidad) };
+                sheet.getCell(r, 11).value = { formula: `J${r}-G${r}`, result: 0 };
+                sheet.getCell(r, 11).numFmt = MONEY;
+                sheet.getCell(r, 11).alignment = { horizontal: 'right', vertical: 'middle' };
                 filasCat.push(r);
                 r++;
             }
 
-            // Fila MOI por diferencia contratista vs. Renova (solo si aplica en esta categoría).
-            if (Math.round(rc.moiEditable) !== 0) {
-                const descMOI = rc.moiEditable < 0
-                    ? 'MANO DE OBRA INDUSTRIAL (crédito — el contratista cotizó bajo el precio Renova)'
-                    : 'MANO DE OBRA INDUSTRIAL (diferencia contratista vs. Renova)';
+            // Filas libres: el contratista agrega ítems sin código Renova directo en el Excel.
+            // No aplican a cañerías (AP/MP/BP) — ahí el material y la instalación van fijos,
+            // solo se puede corregir la cantidad instalada (ver más arriba).
+            if (!esCañeriaCat) {
+                for (let i = 0; i < 4; i++) {
+                    for (let col = 1; col <= 11; col++) {
+                        const cell = sheet.getCell(r, col);
+                        cell.border = gridBorder();
+                        cell.font = { name: 'Arial', size: 9, italic: true, color: { argb: 'FF6D28D9' } };
+                        if (col === 6 || col === 7 || col === 9 || col === 10 || col === 11) cell.alignment = { horizontal: 'right', vertical: 'middle' };
+                        else if (col === 4 || col === 5 || col === 1) cell.alignment = { horizontal: 'center', vertical: 'middle' };
+                        else cell.alignment = { horizontal: 'left', vertical: 'middle' };
+                        if (col === 6 || col === 7 || col === 9 || col === 10 || col === 11) cell.numFmt = MONEY;
+                    }
+                    sheet.getCell(r, 2).value = 'LIBRE';
+                    // Editable: DESCRIPCIÓN, UN, CANT., P.UNIT. CONTRATISTA — el resto queda
+                    // fijo o es fórmula (VALOR FINAL, TOTAL CONTRATISTA, DIFERENCIA).
+                    [3, 4, 5, 9].forEach(col => {
+                        const cell = sheet.getCell(r, col);
+                        cell.fill = fillSolid(AMARILLO_EDITABLE);
+                        cell.protection = { locked: false };
+                    });
+                    sheet.getCell(r, 6).value = 0; // sin precio Renova de referencia
+                    sheet.getCell(r, 7).value = { formula: `F${r}*E${r}`, result: 0 };
+                    sheet.getCell(r, 10).value = { formula: `I${r}*E${r}`, result: 0 };
+                    sheet.getCell(r, 11).value = { formula: `J${r}-G${r}`, result: 0 };
+                    filasCat.push(r);
+                    r++;
+                }
+            }
+
+            // Fila MOI de la categoría = suma de la columna DIFERENCIA de todas sus filas
+            // (ítems editables + filas libres). Con fórmula, no un número fijo, para que se
+            // recalcule sola si el contratista edita cantidades/precios/filas libres en Excel.
+            {
                 const oper = operacionSAPParaItem(rc.cat, 'MANO DE OBRA INDUSTRIAL', true); // línea sintética sin código propio: se mantiene el heurístico
-                const filaMOI = [oper, '', descMOI, 'ST', 1, money(rc.moiEditable), money(rc.moiEditable), '', '', ''];
+                const filaMOI = [oper, '', 'MANO DE OBRA INDUSTRIAL (MOI) — diferencia contratista vs. Renova', 'ST', 1, '', '', '', '', '', ''];
                 filaMOI.forEach((v, i) => {
                     const col = i + 1;
                     const cell = sheet.getCell(r, col);
                     cell.value = v; cell.border = gridBorder();
                     cell.fill = fillSolid(C.orangeL);
                     cell.font = { name: 'Arial', bold: true, size: 9, color: { argb: 'FFC2410C' } };
-                    if (col === 6 || col === 7) { cell.numFmt = MONEY; cell.alignment = { horizontal: 'right', vertical: 'middle' }; }
+                    if (col === 7) { cell.numFmt = MONEY; cell.alignment = { horizontal: 'right', vertical: 'middle' }; }
                     else if (col <= 1 || col === 4 || col === 5) cell.alignment = { horizontal: 'center', vertical: 'middle' };
                 });
-                sheet.getCell(r, 7).value = { formula: `F${r}*E${r}`, result: rc.moiEditable };
+                const rangoDiferencia = filasCat.length ? `SUM(${filasCat.map(fr => 'K' + fr).join(',')})` : '0';
+                sheet.getCell(r, 7).value = { formula: rangoDiferencia, result: rc.moiEditable };
                 filasCat.push(r);
                 r++;
             }
@@ -1380,6 +1447,12 @@ async function generarDCFinalExcel() {
                 : money(rc.total);
             svCtta.numFmt = MONEY; svCtta.font = { name: 'Arial', bold: true, size: 9, color: { argb: C.blue } };
             svCtta.fill = fillSolid(C.blueL); svCtta.alignment = { horizontal: 'right', vertical: 'middle' }; svCtta.border = gridBorder();
+            const svDif = sheet.getCell(r, 11);
+            svDif.value = filasCat.length
+                ? { formula: `SUM(${filasCat.map(fr => 'K' + fr).join(',')})`, result: rc.moiEditable }
+                : money(rc.moiEditable);
+            svDif.numFmt = MONEY; svDif.font = { name: 'Arial', bold: true, size: 9, color: { argb: C.blue } };
+            svDif.fill = fillSolid(C.blueL); svDif.alignment = { horizontal: 'right', vertical: 'middle' }; svDif.border = gridBorder();
             sheet.getCell(filaResumenCat[rc.cat], 6).value = { formula: `G${r}`, result: rc.total };
             r += 2;
         }
@@ -1531,6 +1604,11 @@ async function generarDCFinalExcel() {
         sheet.pageSetup.fitToWidth = 1;
         sheet.pageSetup.fitToHeight = 0;
         sheet.showGridLines = false;
+
+        // Protege la hoja para que el contratista solo pueda tocar lo habilitado (celdas
+        // amarillas: cantidad de cañerías y las 4 filas libres por categoría) y no rompa
+        // fórmulas ni precios fijos por error. Sin contraseña: es una guía, no un candado.
+        await sheet.protect('', { selectLockedCells: true, selectUnlockedCells: true });
 
         const buffer = await workbook.xlsx.writeBuffer();
         const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
