@@ -1411,7 +1411,9 @@ async function generarDCFinalExcel() {
             // Fila MOI de la categoría = suma de la columna DIFERENCIA de todas sus filas
             // (ítems editables + filas libres). Con fórmula, no un número fijo, para que se
             // recalcule sola si el contratista edita cantidades/precios/filas libres en Excel.
-            {
+            // No aplica a CAÑERIAS AP/MP/BP: ahí el precio contratista siempre es el precio
+            // Renova (fijo, sin filas libres), así que nunca hay diferencia que sumar.
+            if (!esCañeriaCat) {
                 const oper = operacionSAPParaItem(rc.cat, 'MANO DE OBRA INDUSTRIAL', true); // línea sintética sin código propio: se mantiene el heurístico
                 const filaMOI = [oper, '', 'MANO DE OBRA INDUSTRIAL (MOI) — diferencia contratista vs. Renova', 'ST', 1, '', '', '', '', '', ''];
                 filaMOI.forEach((v, i) => {
