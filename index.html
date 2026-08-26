@@ -190,14 +190,14 @@ https://github.com/nodeca/pako/blob/main/LICENSE
             <div class="manual-sub">Extractor DC + MOI — pasos para cuadrar el precio contratista de un Detalle Comercial.</div>
             <ol>
                 <li><b>1. Sube el PDF del Detalle Comercial (DC)</b> de Abastible arrastrándolo o haciendo clic en el recuadro de carga.</li>
-                <li><b>2. Espera el análisis por IA</b> (30-60 segundos): extrae automáticamente los ítems, su categoría y el precio Renova de cada uno.</li>
-                <li><b>3. Ingresa el precio contratista</b> de cada ítem en la tabla. Las cañerías son la excepción: siempre usan el precio Renova fijo, no editable.</li>
-                <li><b>4. El MOI de cada categoría se calcula solo</b>, a medida que cargas los precios contratista.</li>
-                <li><b>5. El material Impovar de cañerías se agrega automático</b>, calculado desde <code>impovar.xlsx</code> según diámetro y tira (6 m / 18 m) de cada producto.</li>
-                <li><b>6. Ítems libres y borrado:</b> puedes agregar un ítem libre en cualquier categoría (botón "➕ Ítem libre en...") o borrar cualquier ítem con 🗑️, incluido un MOI ya asignado por el DC si ese monto no corresponde sumarlo de nuevo.</li>
+                <li><b>2. Espera el análisis por IA</b> (30-60 segundos): extrae automáticamente los ítems, su categoría y el precio Renova de cada uno. El código de cada ítem sale de la columna CÓDIGO del DC (sin ceros a la izquierda), excepto en NORMALIZACIONES, donde sale de la columna OPERACIÓN (380/390/400/420).</li>
+                <li><b>3. Ingresa el precio contratista</b> de cada ítem en la tabla. También puedes corregir la <b>cantidad</b> si no coincide con la del DC. Las cañerías son la excepción: siempre usan el precio Renova fijo, no editable.</li>
+                <li><b>4. El MOI de cada categoría se calcula solo</b>, a medida que cargas los precios contratista, y se suma a la columna "Total Renova" del subtotal para que coincida con el "Total Contratista". La columna "Diferencia" (Total Contratista − Total Renova) muestra el detalle por ítem.</li>
+                <li><b>5. El material Impovar de cañerías se agrega automático</b>, calculado desde <code>impovar.xlsx</code> según diámetro y tira (6 m / 18 m) de cada producto. Su cantidad no se edita directamente (se marca "auto"): se recalcula sola si corriges la cantidad del ítem de instalación de cañería al que está vinculado.</li>
+                <li><b>6. Ítems libres y borrado:</b> puedes agregar un ítem libre en cualquier categoría excepto Cañerías AP/MP/BP (botón "➕ Ítem libre en...", no disponible ahí porque esos ítems siempre vienen del DC y de Impovar), o borrar cualquier ítem con 🗑️, incluido un MOI ya asignado por el DC si ese monto no corresponde sumarlo de nuevo.</li>
                 <li><b>7. Servicio Compra Directa / Equipos Compra Directa</b> aparecen siempre disponibles en la tabla, aunque el DC no haya traído ítems ahí, para que se puedan completar después.</li>
                 <li><b>8. Sección RESERVA</b> (Equipos y Tanques de bodega): es informativa, no cuadra contra el contratista.</li>
-                <li><b>9. Genera el Excel "DC Final"</b> con el Sub-Total SOLPED, Sub-Total RESERVA y el Total Costo Proyecto, o usa "Exportar lista simple" si solo necesitas los ítems. "🔄 Nuevo DC" reinicia todo para cargar otro PDF.</li>
+                <li><b>9. Genera el Excel "DC Final"</b> con el Sub-Total SOLPED, Sub-Total RESERVA y el Total Costo Proyecto (incluye la columna DIFERENCIAS), o usa "Exportar lista simple" si solo necesitas los ítems. "🔄 Nuevo DC" reinicia todo para cargar otro PDF.</li>
                 <li><b>10. Guardar y continuar después:</b> "💾 Guardar extracción" descarga todo el trabajo (ítems, precios, categorías) en un archivo .json. Se lo puedes pasar a otra persona — por ejemplo, del contratista al vendedor para que sume Servicio/Equipos Compra Directa — y esa persona lo retoma con "📂 Cargar extracción (.json)" en la pantalla inicial, sin volver a subir el PDF.</li>
             </ol>
             <div class="manual-close"><button type="button" class="btn btn-outline" onclick="cerrarManual()">Cerrar</button></div>
@@ -1628,7 +1628,7 @@ async function generarDCFinalExcel() {
         // ── NOTA FINAL ──
         sheet.mergeCells(r, 1, r, 8);
         const nota = sheet.getCell(r, 1);
-        nota.value = 'Documento generado desde el Extractor DC + MOI. En NORMALIZACIONES la columna OPERACIÓN es el código real del DC (380/390/400/420, etc.); en el resto de las categorías es una sugerencia por categoría/descripción — verificar al digitar en el sistema DC. El SUB-TOTAL SOLPED cuadra con el total Contratista ingresado. La RESERVA (Equipos y Tanques de bodega) es informativa: no la cotiza el contratista y no participa del cuadre, solo se suma al Total Costo Proyecto. "Otros" queda fijo en $0 porque esta herramienta no lo extrae del DC.';
+        nota.value = 'Documento generado desde el Extractor DC + MOI. En NORMALIZACIONES la columna OPERACIÓN es el código real del DC (380/390/400/420, etc.); en el resto de las categorías es una sugerencia por categoría/descripción — verificar al digitar en el sistema DC. El SUB-TOTAL SOLPED cuadra con el total Contratista ingresado: el MOI de cada categoría se suma a VALOR FINAL para que coincida con TOTAL CONTRATISTA, y la columna DIFERENCIAS muestra ese detalle por ítem. La RESERVA (Equipos y Tanques de bodega) es informativa: no la cotiza el contratista y no participa del cuadre, solo se suma al Total Costo Proyecto. "Otros" queda fijo en $0 porque esta herramienta no lo extrae del DC.';
         nota.font = { name: 'Arial', italic: true, size: 8, color: { argb: C.gray } };
         nota.alignment = { horizontal: 'left', vertical: 'middle', wrapText: true };
         sheet.getRow(r).height = 26;
