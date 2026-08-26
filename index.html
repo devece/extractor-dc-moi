@@ -538,6 +538,42 @@ function reset() {
     $('cardReserva').classList.add('hidden');
 }
 
+// Repara comillas dobles sin escapar dentro de valores JSON (ej: medidas en
+// pulgadas como 3/4" que el modelo a veces olvida escapar como \").
+function repararComillasJSON(texto) {
+    let out = '';
+    let inString = false;
+    for (let i = 0; i < texto.length; i++) {
+        const c = texto[i];
+        if (inString && c === '\\') {
+            out += c + (texto[i + 1] || '');
+            i++;
+            continue;
+        }
+        if (c === '"') {
+            if (!inString) {
+                inString = true;
+                out += c;
+                continue;
+            }
+            // Dentro de un string: ¿es el cierre real o una comilla interna?
+            let j = i + 1;
+            while (j < texto.length && /\s/.test(texto[j])) j++;
+            const siguiente = texto[j];
+            const esCierre = siguiente === undefined || ',:}]'.includes(siguiente);
+            if (esCierre) {
+                inString = false;
+                out += c;
+            } else {
+                out += '\\"';
+            }
+            continue;
+        }
+        out += c;
+    }
+    return out;
+}
+
 // ── Extracción del DC vía IA (mismo proxy que usa la app principal) ────
 async function procesarPDF(file) {
     $('cardUpload').classList.add('hidden');
@@ -580,6 +616,7 @@ REGLAS IMPORTANTES:
 5. Usa los precios unitarios Renova exactamente como aparecen en el DC
 6. Para cañerías, usa el precio del SERVICIO de instalación (no el material)
 7. Las cantidades deben ser números (metros, unidades, etc.)
+8. Muchas descripciones incluyen medidas en pulgadas con el símbolo " (ej: 3/4", 1/2", 51/2"). Ese carácter DEBE escaparse como \" dentro de los strings JSON (ej: "descripcion": "CAÑERIA HASTA 3/4\""). Nunca dejes una comilla doble sin escapar dentro de un valor de texto.
 
 ${catMap}
 
@@ -647,7 +684,11 @@ Responde ÚNICAMENTE con JSON válido, sin markdown, sin explicaciones:
         try {
             parsed = JSON.parse(limpio);
         } catch (parseErr) {
-            throw new Error(`No se pudo interpretar la respuesta del DC (${parseErr.message}). Puede que el documento sea muy extenso; intenta con un PDF más pequeño.`);
+            try {
+                parsed = JSON.parse(repararComillasJSON(limpio));
+            } catch (parseErr2) {
+                throw new Error(`No se pudo interpretar la respuesta del DC (${parseErr.message}). Puede que el documento sea muy extenso o tenga caracteres especiales (ej: comillas de pulgadas); intenta con un PDF más pequeño.`);
+            }
         }
 
         if (!parsed.items || parsed.items.length === 0) throw new Error('No se encontraron ítems en el DC.');
