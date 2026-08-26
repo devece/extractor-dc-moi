@@ -145,6 +145,8 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     .tag-moi { font-size: 10.5px; font-weight: 700; color: var(--moi-text); background: #FFEDD5; border-radius: 4px; padding: 1px 6px; margin-left: 6px; }
     input.pctta { width: 110px; padding: 5px 7px; border: 1px solid var(--aba-border); border-radius: 6px; text-align: right; font-size: 13px; font-variant-numeric: tabular-nums; }
     input.pctta:focus { outline: 2px solid var(--aba-orange); border-color: var(--aba-orange); }
+    input.qcant { width: 75px; padding: 5px 7px; border: 1px solid var(--aba-border); border-radius: 6px; text-align: right; font-size: 13px; font-variant-numeric: tabular-nums; }
+    input.qcant:focus { outline: 2px solid var(--aba-orange); border-color: var(--aba-orange); }
     .btn-del { background: none; border: none; cursor: pointer; font-size: 14px; padding: 4px 6px; border-radius: 6px; opacity: .55; }
     .btn-del:hover { opacity: 1; background: var(--bad-bg); }
     .btn-add-libre { background: none; border: 1px dashed #D1D5DB; color: #6D28D9; font-size: 12.5px; font-weight: 600; padding: 5px 10px; border-radius: 6px; cursor: pointer; }
@@ -790,7 +792,7 @@ function renderTabla() {
                 <td>${escapeHTML(it.codigo)}</td>
                 <td>${it.esImpovar ? '↳ ' : ''}${escapeHTML(it.descripcion)}${it.esMOI ? '<span class="tag-moi">MOI</span>' : ''}${it.esCertificador ? '<span class="tag-moi" style="color:#1D4ED8;background:#DBEAFE;">CERTIFICADOR</span>' : ''}${it.esLibre ? '<span class="tag-moi" style="color:#6D28D9;background:#EDE9FE;">LIBRE</span>' : ''}${it.esImpovar ? '<span class="tag-moi" style="color:#92400E;background:#FFFBEB;">🏭 IMPOVAR</span>' : ''}${it.proveedor ? `<span style="font-size:11px;color:#6B7280;"> · 🏢 ${escapeHTML(it.proveedor)}</span>` : ''}</td>
                 <td>${escapeHTML(it.unidad)}</td>
-                <td class="num">${fmt(it.cantidad)}</td>
+                <td class="num"><input type="text" class="qcant" data-idx="${idx}" value="${it.cantidad}" oninput="cambiarCantidad(this)"></td>
                 <td class="num">${fmtMoney(it.precioBase)}</td>
                 <td class="num">${fmtMoney(totalBaseItem)}</td>
                 <td class="num">${it.esMOI
@@ -904,7 +906,7 @@ function renderReserva(totalSolpedContratista) {
                 <td>${escapeHTML(it.codigo)}</td>
                 <td>${escapeHTML(it.descripcion)}</td>
                 <td>${escapeHTML(it.unidad)}</td>
-                <td class="num">${fmt(it.cantidad)}</td>
+                <td class="num"><input type="text" class="qcant" data-idx="${idx}" value="${it.cantidad}" oninput="cambiarCantidad(this)"></td>
                 <td class="num">${fmtMoney(it.precioBase)}</td>
                 <td class="num">${fmtMoney(total)}</td>
                 <td>${escapeHTML(it.stock || '')}</td>
@@ -925,12 +927,31 @@ function parsePrecio(v) {
     return isNaN(n) ? 0 : n;
 }
 
+// A diferencia de parsePrecio (montos en pesos, sin decimales), la cantidad
+// admite decimales (ej: metros de cañería como 4,5 o 12.50).
+function parseCantidad(v) {
+    const n = Number(String(v).replace(',', '.').replace(/[^\d.-]/g, ''));
+    return isNaN(n) ? 0 : n;
+}
+
 function cambiarPrecioCtta(input) {
     const idx = Number(input.dataset.idx);
     dc.items[idx].precioCtta = parsePrecio(input.value);
     renderTabla();
     // Restaurar el foco en el mismo input tras el re-render.
-    const nuevo = document.querySelector(`input[data-idx="${idx}"]`);
+    const nuevo = document.querySelector(`.pctta[data-idx="${idx}"]`);
+    if (nuevo) {
+        nuevo.focus();
+        nuevo.setSelectionRange(nuevo.value.length, nuevo.value.length);
+    }
+}
+
+function cambiarCantidad(input) {
+    const idx = Number(input.dataset.idx);
+    dc.items[idx].cantidad = parseCantidad(input.value);
+    renderTabla();
+    // Restaurar el foco en el mismo input tras el re-render.
+    const nuevo = document.querySelector(`.qcant[data-idx="${idx}"]`);
     if (nuevo) {
         nuevo.focus();
         nuevo.setSelectionRange(nuevo.value.length, nuevo.value.length);
