@@ -616,7 +616,7 @@ Responde ÚNICAMENTE con JSON válido, sin markdown, sin explicaciones:
                 signal: controller.signal,
                 body: JSON.stringify({
                     model: 'claude-sonnet-4-6',
-                    max_tokens: 4000,
+                    max_tokens: 16000,
                     messages: [{
                         role: 'user',
                         content: [
@@ -638,9 +638,17 @@ Responde ÚNICAMENTE con JSON válido, sin markdown, sin explicaciones:
             throw new Error(`Error de la API (${response.status}): ${errBody.substring(0, 200) || 'sin detalle'}`);
         }
         const data = await response.json();
+        if (data.stop_reason === 'max_tokens') {
+            throw new Error('El DC tiene demasiados ítems y la respuesta se cortó antes de completarse. Intenta dividir el PDF en partes más pequeñas.');
+        }
         const texto = data.content.map(c => c.text || '').join('');
         const limpio = texto.replace(/```json|```/g, '').trim();
-        const parsed = JSON.parse(limpio);
+        let parsed;
+        try {
+            parsed = JSON.parse(limpio);
+        } catch (parseErr) {
+            throw new Error(`No se pudo interpretar la respuesta del DC (${parseErr.message}). Puede que el documento sea muy extenso; intenta con un PDF más pequeño.`);
+        }
 
         if (!parsed.items || parsed.items.length === 0) throw new Error('No se encontraron ítems en el DC.');
 
