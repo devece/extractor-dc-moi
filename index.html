@@ -620,6 +620,7 @@ REGLAS IMPORTANTES:
 6. Para cañerías, usa el precio del SERVICIO de instalación (no el material)
 7. Las cantidades deben ser números (metros, unidades, etc.)
 8. Muchas descripciones incluyen medidas en pulgadas con el símbolo " (ej: 3/4", 1/2", 51/2"). Ese carácter DEBE escaparse como \" dentro de los strings JSON (ej: "descripcion": "CAÑERIA HASTA 3/4\""). Nunca dejes una comilla doble sin escapar dentro de un valor de texto.
+9. El campo "codigo" de cada ítem debe ser el valor de la columna CÓDIGO del DC, SIN ceros a la izquierda (ej: si el DC muestra "0250", extrae "250"). EXCEPCIÓN: en la categoría NORMALIZACIONES (Normalización SEC), "codigo" debe ser el valor de la columna OPERACIÓN del DC (ej: 380, 390, 400, 420), también sin ceros a la izquierda — ahí NO uses el código de la columna CÓDIGO.
 
 ${catMap}
 
@@ -631,7 +632,7 @@ Responde ÚNICAMENTE con JSON válido, compacto (sin indentación ni saltos de l
   "direccion": "dirección de la obra",
   "items": [
     {
-      "codigo": "código u operación del ítem tal como aparece en el DC (ej: 380, 390, 400, 420), sino omitir",
+      "codigo": "columna CÓDIGO del DC sin ceros a la izquierda (columna OPERACIÓN en NORMALIZACIONES — ver regla 9), sino omitir",
       "descripcion": "descripción exacta del ítem",
       "categoria": "categoría según el mapeo",
       "unidad": "unidad de medida",
@@ -702,7 +703,9 @@ Responde ÚNICAMENTE con JSON válido, compacto (sin indentación ni saltos de l
             const precioBase = Number(it.precioBase) || 0;
             return {
                 id: nextItemId++,
-                codigo: it.codigo || '',
+                // Sin ceros a la izquierda — ver regla 9 del prompt. Red de seguridad por si el
+                // modelo igual los deja; no toca un "0" solo (evita dejarlo vacío).
+                codigo: String(it.codigo || '').replace(/^0+(?=\d)/, ''),
                 descripcion: it.descripcion || '',
                 categoria,
                 unidad: it.unidad || 'ST',
