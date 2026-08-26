@@ -437,7 +437,8 @@ function buscarMaterialImpovar(item, productos) {
         esMOI: false,
         esImpovar: true,
         proveedor: 'IMPOVAR',
-        idInstalacion: item.id
+        idInstalacion: item.id,
+        tira: mat.tira
     };
 }
 
@@ -762,14 +763,14 @@ function renderTabla() {
 
     let html = `<thead><tr>
         <th>Código</th><th>Descripción</th><th>Unidad</th><th class="num">Cantidad</th>
-        <th class="num">Precio Base</th><th class="num">Total Renova</th><th class="num">Precio Contratista</th><th class="num">Total Contratista</th><th></th>
+        <th class="num">Precio Base</th><th class="num">Total Renova</th><th class="num">Precio Contratista</th><th class="num">Total Contratista</th><th class="num">Diferencia</th><th></th>
     </tr></thead><tbody id="tbodyItems">`;
 
     let totalBaseGeneral = 0, totalMoiGeneral = 0, totalCttaGeneral = 0;
 
     catsPresentes.forEach(cat => {
         const items = dc.items.filter(i => i.categoria === cat);
-        html += `<tr class="cat-header"><td colspan="9">${escapeHTML(cat)}</td></tr>`;
+        html += `<tr class="cat-header"><td colspan="10">${escapeHTML(cat)}</td></tr>`;
 
         let baseCat = 0, cttaCat = 0, moiDcCat = 0;
 
@@ -787,12 +788,19 @@ function renderTabla() {
             // Cañerías (instalación) y material Impovar: precio contratista fijo = Renova,
             // no se negocia ni se edita — ver CATS_CAÑERIA.
             const precioFijo = !it.esMOI && !it.esLibre && (CATS_CAÑERIA.includes(it.categoria) || it.esImpovar);
+            // La diferencia solo es informativa para ítems que realmente se negocian: en
+            // los de precio fijo (cañería/Impovar) y en el MOI que ya trae el DC siempre es
+            // $0 por definición, así que se deja en blanco en vez de mostrar un "$0" inútil.
+            const diferenciaItem = totalCttaItem - totalBaseItem;
 
             html += `<tr class="${it.esMOI ? 'moi-item' : ''}">
                 <td>${escapeHTML(it.codigo)}</td>
                 <td>${it.esImpovar ? '↳ ' : ''}${escapeHTML(it.descripcion)}${it.esMOI ? '<span class="tag-moi">MOI</span>' : ''}${it.esCertificador ? '<span class="tag-moi" style="color:#1D4ED8;background:#DBEAFE;">CERTIFICADOR</span>' : ''}${it.esLibre ? '<span class="tag-moi" style="color:#6D28D9;background:#EDE9FE;">LIBRE</span>' : ''}${it.esImpovar ? '<span class="tag-moi" style="color:#92400E;background:#FFFBEB;">🏭 IMPOVAR</span>' : ''}${it.proveedor ? `<span style="font-size:11px;color:#6B7280;"> · 🏢 ${escapeHTML(it.proveedor)}</span>` : ''}</td>
                 <td>${escapeHTML(it.unidad)}</td>
-                <td class="num"><input type="text" class="qcant" data-idx="${idx}" value="${it.cantidad}" oninput="cambiarCantidad(this)"></td>
+                <td class="num">${it.esImpovar
+                    ? `${fmt(it.cantidad)} <span style="font-size:10px;color:#9CA3AF;">auto</span>`
+                    : `<input type="text" class="qcant" data-idx="${idx}" value="${it.cantidad}" oninput="cambiarCantidad(this)">`
+                }</td>
                 <td class="num">${fmtMoney(it.precioBase)}</td>
                 <td class="num">${fmtMoney(totalBaseItem)}</td>
                 <td class="num">${it.esMOI
@@ -802,6 +810,7 @@ function renderTabla() {
                     : `<input type="text" class="pctta" data-idx="${idx}" value="${fmt(it.precioCtta)}" oninput="cambiarPrecioCtta(this)">`
                 }</td>
                 <td class="num">${fmtMoney(totalCttaItem)}</td>
+                <td class="num">${precioFijo || it.esMOI ? '<span style="color:#9CA3AF;">—</span>' : fmtMoney(diferenciaItem)}</td>
                 <td class="num"><button type="button" class="btn-del" title="${it.esMOI ? 'Este MOI se mantiene y suma por defecto. Bórralo solo si ese monto ya está cubierto por otra vía y no debe sumarse de nuevo.' : 'Quitar ítem'}" onclick="eliminarItem(${idx})">🗑️</button></td>
             </tr>`;
         });
@@ -809,7 +818,11 @@ function renderTabla() {
         // Fila de "Ítem libre" al final de la categoría: si está abierta para esta categoría,
         // un formulario inline (sin selector de categoría — ya está implícita); si no, solo
         // el botón para abrirla. Solo una categoría puede tener el formulario abierto a la vez.
-        if (libreCategoriaAbierta === cat) {
+        // No aplica a cañerías AP/MP/BP: sus ítems (instalación + material Impovar) siempre
+        // vienen del DC y del catálogo Impovar, no tiene sentido agregar uno suelto ahí.
+        if (CATS_CAÑERIA.includes(cat)) {
+            // sin fila de ítem libre
+        } else if (libreCategoriaAbierta === cat) {
             html += `<tr>
                 <td style="color:#9CA3AF;">LIBRE</td>
                 <td><input type="text" id="libreDescInline" placeholder="Descripción" style="width:100%; padding:5px 7px; border:1px solid var(--aba-border); border-radius:6px; font-size:13px;"></td>
@@ -818,14 +831,14 @@ function renderTabla() {
                 <td class="num" style="color:#9CA3AF;">—</td>
                 <td class="num" style="color:#9CA3AF;">—</td>
                 <td class="num"><input type="text" id="librePrecioInline" placeholder="0" style="width:100%; padding:5px 7px; border:1px solid var(--aba-border); border-radius:6px; font-size:13px; text-align:right;"></td>
-                <td colspan="2" style="white-space:nowrap;">
+                <td colspan="3" style="white-space:nowrap;">
                     <button type="button" class="btn btn-primary" style="padding:5px 12px; font-size:12.5px;" onclick="agregarItemLibreEnCategoria('${cat.replace(/'/g, "\\'")}')">Agregar</button>
                     <button type="button" class="btn btn-outline" style="padding:5px 12px; font-size:12.5px;" onclick="cancelarItemLibreInline()">Cancelar</button>
                 </td>
             </tr>`;
         } else {
             html += `<tr>
-                <td colspan="9"><button type="button" class="btn-add-libre" onclick="mostrarItemLibreEnCategoria('${cat.replace(/'/g, "\\'")}')">➕ Ítem libre en ${escapeHTML(cat)}</button></td>
+                <td colspan="10"><button type="button" class="btn-add-libre" onclick="mostrarItemLibreEnCategoria('${cat.replace(/'/g, "\\'")}')">➕ Ítem libre en ${escapeHTML(cat)}</button></td>
             </tr>`;
         }
 
@@ -841,13 +854,14 @@ function renderTabla() {
         html += `<tr class="cat-subtotal">
             <td colspan="4" class="text-right" style="text-align:right;">Subtotal ${escapeHTML(cat)}</td>
             <td class="num">${fmtMoney(baseCat)}</td>
-            <td class="num">${fmtMoney(baseCat + moiDcCat)}</td>
+            <td class="num">${fmtMoney(baseCat + moiCat)}</td>
             <td class="num" style="color:var(--moi-text);">MOI: ${fmtMoney(moiCat)}</td>
             <td class="num">${fmtMoney(cttaCat)}</td>
+            <td class="num">${fmtMoney(cttaCat - (baseCat + moiCat))}</td>
             <td></td>
         </tr>`;
         html += `<tr class="cat-moi ${moiCat < 0 ? 'neg' : ''}">
-            <td colspan="9" style="text-align:right;">
+            <td colspan="10" style="text-align:right;">
                 🛠️ MANO DE OBRA INDUSTRIAL — ${escapeHTML(cat)}: ${fmtMoney(moiCat)}
                 ${moiCat < 0 ? ' <span style="font-weight:400;font-size:11.5px;">(crédito — el DC ya asignó más MOI del que hace falta)</span>' : ''}
             </td>
@@ -948,7 +962,14 @@ function cambiarPrecioCtta(input) {
 
 function cambiarCantidad(input) {
     const idx = Number(input.dataset.idx);
-    dc.items[idx].cantidad = parseCantidad(input.value);
+    const it = dc.items[idx];
+    it.cantidad = parseCantidad(input.value);
+    // Cañería de instalación: recalcula el material Impovar vinculado (su cantidad es
+    // siempre automática, en tiras/rollos según la cantidad instalada — ver CATS_CAÑERIA).
+    if (CATS_CAÑERIA.includes(it.categoria) && !it.esImpovar) {
+        const material = dc.items.find(m => m.esImpovar && m.idInstalacion === it.id);
+        if (material) material.cantidad = calcularMetrosMaterial(it.cantidad, material.tira);
+    }
     renderTabla();
     // Restaurar el foco en el mismo input tras el re-render.
     const nuevo = document.querySelector(`.qcant[data-idx="${idx}"]`);
@@ -1158,7 +1179,7 @@ async function generarDCFinalExcel() {
         sheet.columns = [
             { width: 10 }, { width: 12 }, { width: 38 }, { width: 7 },
             { width: 9 }, { width: 13 }, { width: 14 }, { width: 20 },
-            { width: 14 }, { width: 14 }
+            { width: 14 }, { width: 14 }, { width: 14 }
         ];
 
         let r = 1;
@@ -1324,7 +1345,7 @@ async function generarDCFinalExcel() {
         // ── TABLAS POR CATEGORÍA ──
         for (const rc of resumenCats) {
             sheet.getRow(r).height = 17;
-            sheet.mergeCells(r, 1, r, 10);
+            sheet.mergeCells(r, 1, r, 11);
             const catT = sheet.getCell(r, 1);
             catT.value = rc.cat;
             catT.font = { name: 'Arial', bold: true, size: 10, color: { argb: C.white } };
@@ -1334,7 +1355,7 @@ async function generarDCFinalExcel() {
             // Verde) a veces la factura un certificador distinto del contratista principal.
             // CAÑERIAS muestra proveedor por el material Impovar (proveedor: 'IMPOVAR').
             const mostrarProveedor = rc.esSCD || rc.cat === 'NORMALIZACIONES' || CATS_CAÑERIA.includes(rc.cat);
-            const heads = ['OPERACIÓN', 'CÓDIGO', 'DESCRIPCIÓN', 'UN', 'CANT.', 'VALOR UNIT.', 'VALOR FINAL', mostrarProveedor ? 'PROVEEDOR' : '', 'P.UNIT. CONTRATISTA', 'TOTAL CONTRATISTA'];
+            const heads = ['OPERACIÓN', 'CÓDIGO', 'DESCRIPCIÓN', 'UN', 'CANT.', 'VALOR UNIT.', 'VALOR FINAL', mostrarProveedor ? 'PROVEEDOR' : '', 'P.UNIT. CONTRATISTA', 'TOTAL CONTRATISTA', 'DIFERENCIAS'];
             heads.forEach((h, i) => {
                 const c = sheet.getCell(r, i + 1); c.value = h;
                 c.font = { name: 'Arial', bold: true, size: 8, color: { argb: C.gray } };
@@ -1349,6 +1370,10 @@ async function generarDCFinalExcel() {
             for (const it of rc.itemsNoMOI) {
                 const descUp = String(it.descripcion || '').toUpperCase();
                 const oper = operacionParaLinea(rc.cat, it, descUp, false);
+                // Cañería (instalación) y material Impovar: precio contratista fijo = Renova,
+                // la diferencia siempre es $0 por definición — se deja en blanco en vez de
+                // mostrar un "$0" que no aporta nada (ver precioFijo en renderTabla()).
+                const precioFijo = !it.esLibre && (CATS_CAÑERIA.includes(it.categoria) || it.esImpovar);
                 const fila = [
                     oper,
                     String(it.codigo || '').replace(/^0+/, '') || '-',
@@ -1359,7 +1384,8 @@ async function generarDCFinalExcel() {
                     money(it.precioBase) * money(it.cantidad),
                     mostrarProveedor ? (it.proveedor || '') : '',
                     money(it.precioCtta),
-                    money(it.precioCtta) * money(it.cantidad)
+                    money(it.precioCtta) * money(it.cantidad),
+                    precioFijo ? '' : money(it.precioCtta) * money(it.cantidad) - money(it.precioBase) * money(it.cantidad)
                 ];
                 fila.forEach((v, i) => {
                     const col = i + 1;
@@ -1371,12 +1397,13 @@ async function generarDCFinalExcel() {
                         ? { name: 'Arial', size: 9, italic: true, color: { argb: 'FF92400E' } }
                         : { name: 'Arial', size: 9 };
                     if (it.esImpovar) cell.fill = fillSolid('FFFFFBEB');
-                    if (col === 6 || col === 7 || col === 9 || col === 10) { cell.numFmt = MONEY; cell.alignment = { horizontal: 'right', vertical: 'middle' }; }
+                    if (col === 6 || col === 7 || col === 9 || col === 10 || col === 11) { cell.numFmt = MONEY; cell.alignment = { horizontal: 'right', vertical: 'middle' }; }
                     else if (col === 4 || col === 5 || col === 1) cell.alignment = { horizontal: 'center', vertical: 'middle' };
                     else cell.alignment = { horizontal: 'left', vertical: 'middle' };
                 });
                 sheet.getCell(r, 7).value = { formula: `F${r}*E${r}`, result: money(it.precioBase) * money(it.cantidad) };
                 sheet.getCell(r, 10).value = { formula: `I${r}*E${r}`, result: money(it.precioCtta) * money(it.cantidad) };
+                if (!precioFijo) sheet.getCell(r, 11).value = { formula: `J${r}-G${r}`, result: fila[10] };
                 filasCat.push(r);
                 r++;
             }
@@ -1396,7 +1423,8 @@ async function generarDCFinalExcel() {
                     money(it.precioBase) * money(it.cantidad),
                     mostrarProveedor ? (it.proveedor || '') : '',
                     money(it.precioBase),
-                    money(it.precioBase) * money(it.cantidad)
+                    money(it.precioBase) * money(it.cantidad),
+                    ''
                 ];
                 fila.forEach((v, i) => {
                     const col = i + 1;
@@ -1404,7 +1432,7 @@ async function generarDCFinalExcel() {
                     cell.value = v; cell.border = gridBorder();
                     cell.font = { name: 'Arial', size: 9, italic: true, color: { argb: 'FF9A3412' } };
                     cell.fill = fillSolid('FFFFF7ED');
-                    if (col === 6 || col === 7 || col === 9 || col === 10) { cell.numFmt = MONEY; cell.alignment = { horizontal: 'right', vertical: 'middle' }; }
+                    if (col === 6 || col === 7 || col === 9 || col === 10 || col === 11) { cell.numFmt = MONEY; cell.alignment = { horizontal: 'right', vertical: 'middle' }; }
                     else if (col === 4 || col === 5 || col === 1) cell.alignment = { horizontal: 'center', vertical: 'middle' };
                     else cell.alignment = { horizontal: 'left', vertical: 'middle' };
                 });
@@ -1415,19 +1443,21 @@ async function generarDCFinalExcel() {
             }
 
             // Fila MOI por diferencia contratista vs. Renova (solo si aplica en esta categoría).
+            // Su monto va en VALOR FINAL (no en TOTAL CONTRATISTA) para que el subtotal de
+            // Total Renova de la categoría termine coincidiendo con el de Total Contratista.
             if (Math.round(rc.moiEditable) !== 0) {
                 const descMOI = rc.moiEditable < 0
                     ? 'MANO DE OBRA INDUSTRIAL (crédito — el contratista cotizó bajo el precio Renova)'
                     : 'MANO DE OBRA INDUSTRIAL (diferencia contratista vs. Renova)';
                 const oper = operacionSAPParaItem(rc.cat, 'MANO DE OBRA INDUSTRIAL', true); // línea sintética sin código propio: se mantiene el heurístico
-                const filaMOI = [oper, '', descMOI, 'ST', 1, money(rc.moiEditable), money(rc.moiEditable), '', '', ''];
+                const filaMOI = [oper, '', descMOI, 'ST', 1, money(rc.moiEditable), money(rc.moiEditable), '', '', '', money(rc.moiEditable)];
                 filaMOI.forEach((v, i) => {
                     const col = i + 1;
                     const cell = sheet.getCell(r, col);
                     cell.value = v; cell.border = gridBorder();
                     cell.fill = fillSolid(C.orangeL);
                     cell.font = { name: 'Arial', bold: true, size: 9, color: { argb: 'FFC2410C' } };
-                    if (col === 6 || col === 7) { cell.numFmt = MONEY; cell.alignment = { horizontal: 'right', vertical: 'middle' }; }
+                    if (col === 6 || col === 7 || col === 11) { cell.numFmt = MONEY; cell.alignment = { horizontal: 'right', vertical: 'middle' }; }
                     else if (col <= 1 || col === 4 || col === 5) cell.alignment = { horizontal: 'center', vertical: 'middle' };
                 });
                 sheet.getCell(r, 7).value = { formula: `F${r}*E${r}`, result: rc.moiEditable };
@@ -1453,6 +1483,7 @@ async function generarDCFinalExcel() {
                 : money(rc.total);
             svCtta.numFmt = MONEY; svCtta.font = { name: 'Arial', bold: true, size: 9, color: { argb: C.blue } };
             svCtta.fill = fillSolid(C.blueL); svCtta.alignment = { horizontal: 'right', vertical: 'middle' }; svCtta.border = gridBorder();
+            const sx3 = sheet.getCell(r, 11); sx3.fill = fillSolid(C.blueL); sx3.border = gridBorder();
             sheet.getCell(filaResumenCat[rc.cat], 6).value = { formula: `G${r}`, result: rc.total };
             r += 2;
         }
