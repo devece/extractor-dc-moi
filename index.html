@@ -194,7 +194,8 @@ https://github.com/nodeca/pako/blob/main/LICENSE
                 <li><b>3. Ingresa el precio contratista</b> de cada ítem en la tabla. También puedes corregir la <b>cantidad</b> si no coincide con la del DC. Las cañerías son la excepción: siempre usan el precio Renova fijo, no editable.</li>
                 <li><b>4. El MOI de cada categoría se calcula solo</b>, a medida que cargas los precios contratista, y se suma a la columna "Total Renova" del subtotal para que coincida con el "Total Contratista". La columna "Diferencia" (Total Contratista − Total Renova) muestra el detalle por ítem.</li>
                 <li><b>5. El material Impovar de cañerías se agrega automático</b>, calculado desde <code>impovar.xlsx</code> según diámetro y tira (6 m / 18 m) de cada producto. Su cantidad no se edita directamente (se marca "auto"): se recalcula sola si corriges la cantidad del ítem de instalación de cañería al que está vinculado.</li>
-                <li><b>6. Ítems libres y borrado:</b> puedes agregar un ítem libre en cualquier categoría excepto Cañerías AP/MP/BP (botón "➕ Ítem libre en...", no disponible ahí porque esos ítems siempre vienen del DC y de Impovar), o borrar cualquier ítem con 🗑️, incluido un MOI ya asignado por el DC si ese monto no corresponde sumarlo de nuevo.</li>
+                <li><b>6. Ítems libres y borrado:</b> puedes agregar un ítem libre en cualquier categoría excepto Cañerías AP/MP/BP y NORMALIZACIONES (botón "➕ Ítem libre en...", no disponible ahí porque esos ítems siempre vienen del DC y de Impovar), o borrar cualquier ítem con 🗑️, incluido un MOI ya asignado por el DC si ese monto no corresponde sumarlo de nuevo.</li>
+                <li><b>6b. NORMALIZACIONES (380/390/400/420):</b> el precio contratista de cada ítem sí es editable, pero no admite ítems libres. Si al terminar de editar un ítem (código 400 - certificador incluido) queda un precio distinto al Renova, esa diferencia se traslada automáticamente a un ítem "SOBRECOSTO NORMALIZACIONES" en Servicio Compra Directa, y el ítem vuelve a mostrar su precio Renova.</li>
                 <li><b>7. Servicio Compra Directa / Equipos Compra Directa</b> aparecen siempre disponibles en la tabla, aunque el DC no haya traído ítems ahí, para que se puedan completar después.</li>
                 <li><b>8. Sección RESERVA</b> (Equipos y Tanques de bodega): es informativa, no cuadra contra el contratista.</li>
                 <li><b>9. Genera el Excel "DC Final"</b> con el Sub-Total SOLPED, Sub-Total RESERVA y el Total Costo Proyecto (incluye la columna DIFERENCIAS), o usa "Exportar lista simple" si solo necesitas los ítems. "🔄 Nuevo DC" reinicia todo para cargar otro PDF.</li>
@@ -301,6 +302,50 @@ const CATS_CAÑERIA = ['CAÑERIAS AP', 'CAÑERIAS MP', 'CAÑERIAS BP'];
 // cotiza estos ítems y no participan del cuadre Base+MOI=Contratista — van aparte, en su
 // propia sección tanto en pantalla como en el Excel de DC Final.
 const CATS_RESERVA = ['EQUIPO', 'TANQUES'];
+// NORMALIZACIONES (operaciones SEC 380/390/400/420): el contratista SÍ puede editar el
+// precio unitario de cada ítem (columna Precio Contratista, igual que en la mayoría de
+// categorías) pero NO puede agregar ítems libres (sin código Renova) — no hay "valores
+// libres" en esta categoría, solo ajustes sobre ítems ya extraídos del DC. Cualquier
+// diferencia que resulte de esos ajustes no se acumula como MOI de NORMALIZACIONES: se
+// traslada a un único ítem SOBRECOSTO NORMALIZACIONES en SCD (ver
+// barrerSobrecostoNormalizaciones), y el ítem editado vuelve a mostrar el precio base.
+const CATS_SIN_ITEM_LIBRE = [...CATS_CAÑERIA, 'NORMALIZACIONES'];
+const SOBRECOSTO_NORMALIZACIONES_DESC = 'SOBRECOSTO NORMALIZACIONES';
+const SOBRECOSTO_NORMALIZACIONES_CAT = 'SERVICIO COMPRA DIRECTA';
+
+// Recorre los ítems de NORMALIZACIONES y suma a un único ítem "SOBRECOSTO NORMALIZACIONES"
+// en SERVICIO COMPRA DIRECTA toda diferencia entre precioCtta y precioBase (venga de una
+// edición del contratista en cambiarPrecioCtta, o de una extracción/JSON cargado con esa
+// diferencia ya presente), dejando los ítems de NORMALIZACIONES en precioCtta = precioBase
+// para que la categoría siempre cuadre por sí sola y el sobrecosto quede visible en SCD.
+function barrerSobrecostoNormalizaciones() {
+    if (!dc || !Array.isArray(dc.items)) return;
+    let diferencia = 0;
+    dc.items.forEach(it => {
+        if (it.categoria !== 'NORMALIZACIONES' || it.esMOI) return;
+        diferencia += (it.precioCtta - it.precioBase) * it.cantidad;
+        it.precioCtta = it.precioBase;
+    });
+    if (!diferencia) return;
+    const existente = dc.items.find(i => i.esSobrecostoNormalizaciones);
+    if (existente) {
+        existente.precioCtta += diferencia;
+    } else {
+        dc.items.push({
+            id: nextItemId++,
+            codigo: '',
+            descripcion: SOBRECOSTO_NORMALIZACIONES_DESC,
+            categoria: SOBRECOSTO_NORMALIZACIONES_CAT,
+            unidad: 'GL',
+            cantidad: 1,
+            precioBase: 0,
+            esMOI: false,
+            proveedor: '',
+            precioCtta: diferencia,
+            esSobrecostoNormalizaciones: true
+        });
+    }
+}
 
 let dc = null; // { proyecto, cliente, ciudad, direccion, items: [...] }
 let nextItemId = 1;
@@ -506,6 +551,7 @@ function cargarDC(event) {
         }
         dc = data;
         nextItemId = dc.items.reduce((max, i) => Math.max(max, Number(i.id) || 0), 0) + 1;
+        barrerSobrecostoNormalizaciones();
         libreCategoriaAbierta = null;
         $('cardUpload').classList.add('hidden');
         $('cardError').classList.add('hidden');
@@ -726,6 +772,7 @@ Responde ÚNICAMENTE con JSON válido, compacto (sin indentación ni saltos de l
                 precioCtta: precioBase
             };
         });
+        barrerSobrecostoNormalizaciones();
 
         // Cañerías: agrega la línea de material Impovar de cada ítem de instalación (precio
         // real desde impovar.xlsx del repo, no una estimación de la IA). Si el archivo no
@@ -810,7 +857,7 @@ function renderTabla() {
                     ? '<span style="color:#9CA3AF;">— (MOI del DC)</span>'
                     : precioFijo
                     ? `${fmtMoney(it.precioCtta)} <span style="font-size:10px;color:#9CA3AF;">fijo</span>`
-                    : `<input type="text" class="pctta" data-idx="${idx}" value="${fmt(it.precioCtta)}" oninput="cambiarPrecioCtta(this)">`
+                    : `<input type="text" class="pctta" data-idx="${idx}" value="${fmt(it.precioCtta)}" oninput="cambiarPrecioCtta(this)"${it.categoria === 'NORMALIZACIONES' ? ' onblur="confirmarPrecioNormalizaciones(this)"' : ''}>`
                 }</td>
                 <td class="num">${fmtMoney(totalCttaItem)}</td>
                 <td class="num">${precioFijo || it.esMOI ? '<span style="color:#9CA3AF;">—</span>' : fmtMoney(diferenciaItem)}</td>
@@ -823,7 +870,7 @@ function renderTabla() {
         // el botón para abrirla. Solo una categoría puede tener el formulario abierto a la vez.
         // No aplica a cañerías AP/MP/BP: sus ítems (instalación + material Impovar) siempre
         // vienen del DC y del catálogo Impovar, no tiene sentido agregar uno suelto ahí.
-        if (CATS_CAÑERIA.includes(cat)) {
+        if (CATS_SIN_ITEM_LIBRE.includes(cat)) {
             // sin fila de ítem libre
         } else if (libreCategoriaAbierta === cat) {
             html += `<tr>
@@ -951,9 +998,17 @@ function parseCantidad(v) {
     return isNaN(n) ? 0 : n;
 }
 
+// cambiarPrecioCtta reemplaza el <input> vía innerHTML en cada tecleo y lo vuelve a
+// enfocar: eso dispara un blur "falso" del input viejo antes del focus() del nuevo. Esta
+// bandera le indica a confirmarPrecioNormalizaciones que ese blur es solo del re-render,
+// no que el contratista realmente salió del campo, para no barrer la diferencia a mitad
+// de tecleo.
+let reenfocandoPctta = false;
+
 function cambiarPrecioCtta(input) {
     const idx = Number(input.dataset.idx);
     dc.items[idx].precioCtta = parsePrecio(input.value);
+    reenfocandoPctta = true;
     renderTabla();
     // Restaurar el foco en el mismo input tras el re-render.
     const nuevo = document.querySelector(`.pctta[data-idx="${idx}"]`);
@@ -961,6 +1016,16 @@ function cambiarPrecioCtta(input) {
         nuevo.focus();
         nuevo.setSelectionRange(nuevo.value.length, nuevo.value.length);
     }
+    reenfocandoPctta = false;
+}
+
+// Al salir del campo de precio contratista de un ítem de NORMALIZACIONES: si el contratista
+// dejó un precio distinto al base, esa diferencia se traslada a SOBRECOSTO NORMALIZACIONES
+// (SCD) y el ítem vuelve a mostrar su precio base — ver barrerSobrecostoNormalizaciones.
+function confirmarPrecioNormalizaciones(input) {
+    if (reenfocandoPctta) return;
+    barrerSobrecostoNormalizaciones();
+    renderTabla();
 }
 
 function cambiarCantidad(input) {
