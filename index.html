@@ -195,7 +195,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
                 <li><b>4. El MOI de cada categoría se calcula solo</b>, a medida que cargas los precios contratista, y se suma a la columna "Total Renova" del subtotal para que coincida con el "Total Contratista". La columna "Diferencia" (Total Contratista − Total Renova) muestra el detalle por ítem.</li>
                 <li><b>5. El material Impovar de cañerías se agrega automático</b>, calculado desde <code>impovar.xlsx</code> según diámetro y tira (6 m / 18 m) de cada producto. Su cantidad no se edita directamente (se marca "auto"): se recalcula sola si corriges la cantidad del ítem de instalación de cañería al que está vinculado.</li>
                 <li><b>6. Ítems libres y borrado:</b> puedes agregar un ítem libre en cualquier categoría excepto Cañerías AP/MP/BP y NORMALIZACIONES (botón "➕ Ítem libre en...", no disponible ahí porque esos ítems siempre vienen del DC y de Impovar), o borrar cualquier ítem con 🗑️, incluido un MOI ya asignado por el DC si ese monto no corresponde sumarlo de nuevo.</li>
-                <li><b>6b. NORMALIZACIONES (380/390/400/420):</b> el precio contratista de cada ítem sí es editable, pero no admite ítems libres. Si al terminar de editar un ítem (código 400 - certificador incluido) queda un precio distinto al Renova, esa diferencia se traslada automáticamente a un ítem "SOBRECOSTO NORMALIZACIONES" en Servicio Compra Directa, y el ítem vuelve a mostrar su precio Renova.</li>
+                <li><b>6b. NORMALIZACIONES (380/390/400/420):</b> el precio contratista de cada ítem sí es editable, pero no admite ítems libres. Si al terminar de editar un ítem queda un precio distinto al Renova, esa diferencia se traslada automáticamente a Servicio Compra Directa y el ítem vuelve a mostrar su precio Renova: 380/390/420 van a "SOBRECOSTO NORMALIZACIONES"; el código 400 (certificador) va aparte, a "SOBRECOSTO CERTIFICADOR NORMALIZACIONES", porque a veces lo factura un proveedor distinto del contratista principal. El Excel "DC Final" agrega una nota pidiéndole a comercial que verifique si el certificador es el mismo contratista (y entonces sume ambos montos) o uno distinto (y entonces se le pague aparte).</li>
                 <li><b>7. Servicio Compra Directa / Equipos Compra Directa</b> aparecen siempre disponibles en la tabla, aunque el DC no haya traído ítems ahí, para que se puedan completar después.</li>
                 <li><b>8. Sección RESERVA</b> (Equipos y Tanques de bodega): es informativa, no cuadra contra el contratista.</li>
                 <li><b>9. Genera el Excel "DC Final"</b> con el Sub-Total SOLPED, Sub-Total RESERVA y el Total Costo Proyecto (incluye la columna DIFERENCIAS), o usa "Exportar lista simple" si solo necesitas los ítems. "🔄 Nuevo DC" reinicia todo para cargar otro PDF.</li>
@@ -307,44 +307,63 @@ const CATS_RESERVA = ['EQUIPO', 'TANQUES'];
 // categorías) pero NO puede agregar ítems libres (sin código Renova) — no hay "valores
 // libres" en esta categoría, solo ajustes sobre ítems ya extraídos del DC. Cualquier
 // diferencia que resulte de esos ajustes no se acumula como MOI de NORMALIZACIONES: se
-// traslada a un único ítem SOBRECOSTO NORMALIZACIONES en SCD (ver
-// barrerSobrecostoNormalizaciones), y el ítem editado vuelve a mostrar el precio base.
+// traslada a SCD (ver barrerSobrecostoNormalizaciones), y el ítem editado vuelve a mostrar
+// el precio base. El código 400 (certificador / Sello Verde) va a un ítem SCD aparte del
+// resto (380/390/420): a veces lo factura un proveedor distinto del contratista principal,
+// así que su sobrecosto no debe mezclarse a ciegas con el del contratista — ver la nota de
+// verificación que se agrega en el Excel DC Final (RESUMEN CONTRATISTA/CERTIFICADOR).
 const CATS_SIN_ITEM_LIBRE = [...CATS_CAÑERIA, 'NORMALIZACIONES'];
 const SOBRECOSTO_NORMALIZACIONES_DESC = 'SOBRECOSTO NORMALIZACIONES';
+const SOBRECOSTO_CERTIFICADOR_DESC = 'SOBRECOSTO CERTIFICADOR NORMALIZACIONES (cód. 400)';
 const SOBRECOSTO_NORMALIZACIONES_CAT = 'SERVICIO COMPRA DIRECTA';
 
-// Recorre los ítems de NORMALIZACIONES y suma a un único ítem "SOBRECOSTO NORMALIZACIONES"
-// en SERVICIO COMPRA DIRECTA toda diferencia entre precioCtta y precioBase (venga de una
-// edición del contratista en cambiarPrecioCtta, o de una extracción/JSON cargado con esa
-// diferencia ya presente), dejando los ítems de NORMALIZACIONES en precioCtta = precioBase
-// para que la categoría siempre cuadre por sí sola y el sobrecosto quede visible en SCD.
-function barrerSobrecostoNormalizaciones() {
-    if (!dc || !Array.isArray(dc.items)) return;
-    let diferencia = 0;
-    dc.items.forEach(it => {
-        if (it.categoria !== 'NORMALIZACIONES' || it.esMOI) return;
-        diferencia += (it.precioCtta - it.precioBase) * it.cantidad;
-        it.precioCtta = it.precioBase;
-    });
+// Suma `diferencia` al ítem SCD marcado con `flagProp` (lo crea si no existe todavía).
+// `proveedor`, si viene, se copia al ítem para que quede visible a quién corresponde pagarle.
+function upsertSobrecostoScd(flagProp, descripcion, diferencia, proveedor) {
     if (!diferencia) return;
-    const existente = dc.items.find(i => i.esSobrecostoNormalizaciones);
+    const existente = dc.items.find(i => i[flagProp]);
     if (existente) {
         existente.precioCtta += diferencia;
+        if (proveedor) existente.proveedor = proveedor;
     } else {
         dc.items.push({
             id: nextItemId++,
             codigo: '',
-            descripcion: SOBRECOSTO_NORMALIZACIONES_DESC,
+            descripcion,
             categoria: SOBRECOSTO_NORMALIZACIONES_CAT,
             unidad: 'GL',
             cantidad: 1,
             precioBase: 0,
             esMOI: false,
-            proveedor: '',
+            proveedor: proveedor || '',
             precioCtta: diferencia,
-            esSobrecostoNormalizaciones: true
+            [flagProp]: true
         });
     }
+}
+
+// Recorre los ítems de NORMALIZACIONES y traslada a SCD toda diferencia entre precioCtta y
+// precioBase (venga de una edición del contratista en cambiarPrecioCtta, o de una
+// extracción/JSON cargado con esa diferencia ya presente), dejando los ítems de
+// NORMALIZACIONES en precioCtta = precioBase para que la categoría siempre cuadre por sí
+// sola. El código 400 (certificador) se acumula en su propio ítem SOBRECOSTO CERTIFICADOR,
+// separado del resto (SOBRECOSTO NORMALIZACIONES) — ver comentario de CATS_SIN_ITEM_LIBRE.
+function barrerSobrecostoNormalizaciones() {
+    if (!dc || !Array.isArray(dc.items)) return;
+    let diferencia = 0, diferenciaCertificador = 0, proveedorCertificador = '';
+    dc.items.forEach(it => {
+        if (it.categoria !== 'NORMALIZACIONES' || it.esMOI) return;
+        const diff = (it.precioCtta - it.precioBase) * it.cantidad;
+        if (it.esCertificador) {
+            diferenciaCertificador += diff;
+            if (it.proveedor) proveedorCertificador = it.proveedor;
+        } else {
+            diferencia += diff;
+        }
+        it.precioCtta = it.precioBase;
+    });
+    upsertSobrecostoScd('esSobrecostoNormalizaciones', SOBRECOSTO_NORMALIZACIONES_DESC, diferencia);
+    upsertSobrecostoScd('esSobrecostoCertificador', SOBRECOSTO_CERTIFICADOR_DESC, diferenciaCertificador, proveedorCertificador);
 }
 
 let dc = null; // { proyecto, cliente, ciudad, direccion, items: [...] }
@@ -1612,9 +1631,16 @@ async function generarDCFinalExcel() {
         // pero la certificación (código 400, Sello Verde) y el material de cañería (Impovar)
         // suelen ser proveedores aparte. La columna PROVEEDOR queda en su propia celda de
         // texto (no fórmula) para poder completarla o corregirla a mano si el DC no la trae.
+        // El sobrecosto del código 400 (si el contratista editó su precio en NORMALIZACIONES)
+        // vive aparte en SCD como ítem esSobrecostoCertificador — ver barrerSobrecostoNormalizaciones.
+        // Se suma aquí al total del certificador porque, aunque la app no puede saber si el
+        // certificador es o no el mismo contratista, el monto igual hay que pagarlo a alguien.
         const itemsCertificador = dc.items.filter(i => i.categoria === 'NORMALIZACIONES' && i.esCertificador);
-        const totalCertificador = itemsCertificador.reduce((s, i) => s + i.precioCtta * i.cantidad, 0);
-        const proveedorCertificador = (itemsCertificador.find(i => i.proveedor) || {}).proveedor || '';
+        const itemSobrecostoCertificador = dc.items.find(i => i.esSobrecostoCertificador);
+        const sobrecostoCertificador = itemSobrecostoCertificador ? itemSobrecostoCertificador.precioCtta * itemSobrecostoCertificador.cantidad : 0;
+        const totalCertificador = itemsCertificador.reduce((s, i) => s + i.precioBase * i.cantidad, 0) + sobrecostoCertificador;
+        const proveedorCertificador = (itemsCertificador.find(i => i.proveedor) || {}).proveedor
+            || (itemSobrecostoCertificador && itemSobrecostoCertificador.proveedor) || '';
         const itemsImpovarTodos = dc.items.filter(i => i.esImpovar);
         const totalImpovarGeneral = itemsImpovarTodos.reduce((s, i) => s + i.precioBase * i.cantidad, 0);
         const totalContratistaPuro = subTotalSOLPED - totalCertificador - totalImpovarGeneral;
@@ -1634,17 +1660,26 @@ async function generarDCFinalExcel() {
             c.alignment = { horizontal: 'center', vertical: 'middle' };
         });
         r++;
+        // Aviso del certificador: falta proveedor (siempre relevante) o, si el contratista dejó
+        // un precio distinto al Renova en el código 400, que comercial verifique si ese
+        // certificador es el mismo contratista principal (entonces súmalo a CONTRATISTA) o uno
+        // distinto (entonces se le paga aparte, según PROVEEDOR) — la app no puede saberlo sola.
+        const avisoCertificadorTexto = !proveedorCertificador && totalCertificador > 0
+            ? '⚠ completar'
+            : sobrecostoCertificador
+            ? '⚠ verificar: ¿mismo contratista?'
+            : '';
         const filasRCP = [
-            ['CONTRATISTA', '', totalContratistaPuro, false],
-            ['CERTIFICADOR (Sello Verde / cód. 400)', proveedorCertificador, totalCertificador, !proveedorCertificador && totalCertificador > 0],
-            ['IMPOVAR (material cañerías)', 'IMPOVAR', totalImpovarGeneral, false]
+            ['CONTRATISTA', '', totalContratistaPuro, false, ''],
+            ['CERTIFICADOR (Sello Verde / cód. 400)', proveedorCertificador, totalCertificador, !!avisoCertificadorTexto, avisoCertificadorTexto],
+            ['IMPOVAR (material cañerías)', 'IMPOVAR', totalImpovarGeneral, false, '']
         ];
-        filasRCP.forEach(([tipo, proveedor, monto, esAviso]) => {
+        filasRCP.forEach(([tipo, proveedor, monto, esAviso, textoAviso]) => {
             sheet.mergeCells(r, 1, r, 3);
             const ct = sheet.getCell(r, 1); ct.value = tipo;
             ct.font = { name: 'Arial', bold: true, size: 9 }; ct.alignment = { horizontal: 'left', vertical: 'middle' }; ct.border = gridBorder();
             sheet.mergeCells(r, 4, r, 6);
-            const cp = sheet.getCell(r, 4); cp.value = proveedor || (esAviso ? '⚠ completar' : '');
+            const cp = sheet.getCell(r, 4); cp.value = proveedor || (esAviso ? (textoAviso || '⚠ completar') : '');
             cp.font = { name: 'Arial', size: 9, italic: !proveedor, color: { argb: esAviso ? C.red : C.blue } };
             cp.alignment = { horizontal: 'left', vertical: 'middle' }; cp.border = gridBorder();
             sheet.mergeCells(r, 7, r, 8);
@@ -1652,6 +1687,18 @@ async function generarDCFinalExcel() {
             cm.numFmt = MONEY; cm.font = { name: 'Arial', bold: true, size: 9 }; cm.alignment = { horizontal: 'right', vertical: 'middle' }; cm.border = gridBorder();
             r++;
         });
+        // Nota ampliada del sobrecosto del certificador (código 400): el ítem SOBRECOSTO
+        // CERTIFICADOR NORMALIZACIONES ya está en el detalle de SCD más arriba; esta fila solo
+        // explica qué hacer con él, para que comercial no tenga que adivinarlo.
+        if (sobrecostoCertificador) {
+            sheet.mergeCells(r, 1, r, 8);
+            const na = sheet.getCell(r, 1);
+            na.value = `⚠ Sobrecosto código 400 (certificador) vs. Renova: ${money(sobrecostoCertificador)}. Si el certificador es el mismo contratista que instala, súmalo al monto de CONTRATISTA de esta tabla; si es un proveedor distinto, se le paga aparte según PROVEEDOR.`;
+            na.font = { name: 'Arial', italic: true, size: 8.5, color: { argb: C.red } };
+            na.alignment = { horizontal: 'left', vertical: 'middle', wrapText: true };
+            sheet.getRow(r).height = 26;
+            r++;
+        }
         r++;
 
         // ── CUADRE FINAL ──
