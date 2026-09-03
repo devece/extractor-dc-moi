@@ -301,6 +301,47 @@ const CATS_CAÑERIA = ['CAÑERIAS AP', 'CAÑERIAS MP', 'CAÑERIAS BP'];
 // cotiza estos ítems y no participan del cuadre Base+MOI=Contratista — van aparte, en su
 // propia sección tanto en pantalla como en el Excel de DC Final.
 const CATS_RESERVA = ['EQUIPO', 'TANQUES'];
+// NORMALIZACIONES (operaciones SEC 380/390/400/420): tarifa fija, igual que cañerías —
+// el contratista no ingresa valores libres aquí (ni edita el precio por ítem ni agrega
+// ítems libres). Cualquier diferencia se traslada a un ítem SOBRECOSTO NORMALIZACIONES en
+// SCD (ver barrerSobrecostoNormalizaciones), nunca se ve dentro de esta categoría.
+const CATS_SIN_ITEM_LIBRE = [...CATS_CAÑERIA, 'NORMALIZACIONES'];
+const SOBRECOSTO_NORMALIZACIONES_DESC = 'SOBRECOSTO NORMALIZACIONES';
+const SOBRECOSTO_NORMALIZACIONES_CAT = 'SERVICIO COMPRA DIRECTA';
+
+// Recorre los ítems de NORMALIZACIONES: si alguno trae precioCtta distinto de precioBase
+// (ej. una extracción/JSON cargado de antes de esta regla), suma esa diferencia a un único
+// ítem "SOBRECOSTO NORMALIZACIONES" en SERVICIO COMPRA DIRECTA y deja los ítems de
+// NORMALIZACIONES a precio fijo (precioCtta = precioBase), para que la categoría siempre
+// cuadre por sí sola y el sobrecosto quede visible aparte, en SCD.
+function barrerSobrecostoNormalizaciones() {
+    if (!dc || !Array.isArray(dc.items)) return;
+    let diferencia = 0;
+    dc.items.forEach(it => {
+        if (it.categoria !== 'NORMALIZACIONES' || it.esMOI) return;
+        diferencia += (it.precioCtta - it.precioBase) * it.cantidad;
+        it.precioCtta = it.precioBase;
+    });
+    if (!diferencia) return;
+    const existente = dc.items.find(i => i.esSobrecostoNormalizaciones);
+    if (existente) {
+        existente.precioCtta += diferencia;
+    } else {
+        dc.items.push({
+            id: nextItemId++,
+            codigo: '',
+            descripcion: SOBRECOSTO_NORMALIZACIONES_DESC,
+            categoria: SOBRECOSTO_NORMALIZACIONES_CAT,
+            unidad: 'GL',
+            cantidad: 1,
+            precioBase: 0,
+            esMOI: false,
+            proveedor: '',
+            precioCtta: diferencia,
+            esSobrecostoNormalizaciones: true
+        });
+    }
+}
 
 let dc = null; // { proyecto, cliente, ciudad, direccion, items: [...] }
 let nextItemId = 1;
@@ -506,6 +547,7 @@ function cargarDC(event) {
         }
         dc = data;
         nextItemId = dc.items.reduce((max, i) => Math.max(max, Number(i.id) || 0), 0) + 1;
+        barrerSobrecostoNormalizaciones();
         libreCategoriaAbierta = null;
         $('cardUpload').classList.add('hidden');
         $('cardError').classList.add('hidden');
@@ -726,6 +768,7 @@ Responde ÚNICAMENTE con JSON válido, compacto (sin indentación ni saltos de l
                 precioCtta: precioBase
             };
         });
+        barrerSobrecostoNormalizaciones();
 
         // Cañerías: agrega la línea de material Impovar de cada ítem de instalación (precio
         // real desde impovar.xlsx del repo, no una estimación de la IA). Si el archivo no
@@ -790,7 +833,7 @@ function renderTabla() {
 
             // Cañerías (instalación) y material Impovar: precio contratista fijo = Renova,
             // no se negocia ni se edita — ver CATS_CAÑERIA.
-            const precioFijo = !it.esMOI && !it.esLibre && (CATS_CAÑERIA.includes(it.categoria) || it.esImpovar);
+            const precioFijo = !it.esMOI && !it.esLibre && (CATS_CAÑERIA.includes(it.categoria) || it.esImpovar || it.categoria === 'NORMALIZACIONES');
             // La diferencia solo es informativa para ítems que realmente se negocian: en
             // los de precio fijo (cañería/Impovar) y en el MOI que ya trae el DC siempre es
             // $0 por definición, así que se deja en blanco en vez de mostrar un "$0" inútil.
@@ -823,7 +866,7 @@ function renderTabla() {
         // el botón para abrirla. Solo una categoría puede tener el formulario abierto a la vez.
         // No aplica a cañerías AP/MP/BP: sus ítems (instalación + material Impovar) siempre
         // vienen del DC y del catálogo Impovar, no tiene sentido agregar uno suelto ahí.
-        if (CATS_CAÑERIA.includes(cat)) {
+        if (CATS_SIN_ITEM_LIBRE.includes(cat)) {
             // sin fila de ítem libre
         } else if (libreCategoriaAbierta === cat) {
             html += `<tr>
@@ -1376,7 +1419,7 @@ async function generarDCFinalExcel() {
                 // Cañería (instalación) y material Impovar: precio contratista fijo = Renova,
                 // la diferencia siempre es $0 por definición — se deja en blanco en vez de
                 // mostrar un "$0" que no aporta nada (ver precioFijo en renderTabla()).
-                const precioFijo = !it.esLibre && (CATS_CAÑERIA.includes(it.categoria) || it.esImpovar);
+                const precioFijo = !it.esLibre && (CATS_CAÑERIA.includes(it.categoria) || it.esImpovar || it.categoria === 'NORMALIZACIONES');
                 const fila = [
                     oper,
                     String(it.codigo || '').replace(/^0+/, '') || '-',
