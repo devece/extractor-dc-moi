@@ -301,19 +301,22 @@ const CATS_CAÑERIA = ['CAÑERIAS AP', 'CAÑERIAS MP', 'CAÑERIAS BP'];
 // cotiza estos ítems y no participan del cuadre Base+MOI=Contratista — van aparte, en su
 // propia sección tanto en pantalla como en el Excel de DC Final.
 const CATS_RESERVA = ['EQUIPO', 'TANQUES'];
-// NORMALIZACIONES (operaciones SEC 380/390/400/420): tarifa fija, igual que cañerías —
-// el contratista no ingresa valores libres aquí (ni edita el precio por ítem ni agrega
-// ítems libres). Cualquier diferencia se traslada a un ítem SOBRECOSTO NORMALIZACIONES en
-// SCD (ver barrerSobrecostoNormalizaciones), nunca se ve dentro de esta categoría.
+// NORMALIZACIONES (operaciones SEC 380/390/400/420): el contratista SÍ puede editar el
+// precio unitario de cada ítem (columna Precio Contratista, igual que en la mayoría de
+// categorías) pero NO puede agregar ítems libres (sin código Renova) — no hay "valores
+// libres" en esta categoría, solo ajustes sobre ítems ya extraídos del DC. Cualquier
+// diferencia que resulte de esos ajustes no se acumula como MOI de NORMALIZACIONES: se
+// traslada a un único ítem SOBRECOSTO NORMALIZACIONES en SCD (ver
+// barrerSobrecostoNormalizaciones), y el ítem editado vuelve a mostrar el precio base.
 const CATS_SIN_ITEM_LIBRE = [...CATS_CAÑERIA, 'NORMALIZACIONES'];
 const SOBRECOSTO_NORMALIZACIONES_DESC = 'SOBRECOSTO NORMALIZACIONES';
 const SOBRECOSTO_NORMALIZACIONES_CAT = 'SERVICIO COMPRA DIRECTA';
 
-// Recorre los ítems de NORMALIZACIONES: si alguno trae precioCtta distinto de precioBase
-// (ej. una extracción/JSON cargado de antes de esta regla), suma esa diferencia a un único
-// ítem "SOBRECOSTO NORMALIZACIONES" en SERVICIO COMPRA DIRECTA y deja los ítems de
-// NORMALIZACIONES a precio fijo (precioCtta = precioBase), para que la categoría siempre
-// cuadre por sí sola y el sobrecosto quede visible aparte, en SCD.
+// Recorre los ítems de NORMALIZACIONES y suma a un único ítem "SOBRECOSTO NORMALIZACIONES"
+// en SERVICIO COMPRA DIRECTA toda diferencia entre precioCtta y precioBase (venga de una
+// edición del contratista en cambiarPrecioCtta, o de una extracción/JSON cargado con esa
+// diferencia ya presente), dejando los ítems de NORMALIZACIONES en precioCtta = precioBase
+// para que la categoría siempre cuadre por sí sola y el sobrecosto quede visible en SCD.
 function barrerSobrecostoNormalizaciones() {
     if (!dc || !Array.isArray(dc.items)) return;
     let diferencia = 0;
@@ -833,7 +836,7 @@ function renderTabla() {
 
             // Cañerías (instalación) y material Impovar: precio contratista fijo = Renova,
             // no se negocia ni se edita — ver CATS_CAÑERIA.
-            const precioFijo = !it.esMOI && !it.esLibre && (CATS_CAÑERIA.includes(it.categoria) || it.esImpovar || it.categoria === 'NORMALIZACIONES');
+            const precioFijo = !it.esMOI && !it.esLibre && (CATS_CAÑERIA.includes(it.categoria) || it.esImpovar);
             // La diferencia solo es informativa para ítems que realmente se negocian: en
             // los de precio fijo (cañería/Impovar) y en el MOI que ya trae el DC siempre es
             // $0 por definición, así que se deja en blanco en vez de mostrar un "$0" inútil.
@@ -853,7 +856,7 @@ function renderTabla() {
                     ? '<span style="color:#9CA3AF;">— (MOI del DC)</span>'
                     : precioFijo
                     ? `${fmtMoney(it.precioCtta)} <span style="font-size:10px;color:#9CA3AF;">fijo</span>`
-                    : `<input type="text" class="pctta" data-idx="${idx}" value="${fmt(it.precioCtta)}" oninput="cambiarPrecioCtta(this)">`
+                    : `<input type="text" class="pctta" data-idx="${idx}" value="${fmt(it.precioCtta)}" oninput="cambiarPrecioCtta(this)"${it.categoria === 'NORMALIZACIONES' ? ' onblur="confirmarPrecioNormalizaciones(this)"' : ''}>`
                 }</td>
                 <td class="num">${fmtMoney(totalCttaItem)}</td>
                 <td class="num">${precioFijo || it.esMOI ? '<span style="color:#9CA3AF;">—</span>' : fmtMoney(diferenciaItem)}</td>
@@ -994,9 +997,17 @@ function parseCantidad(v) {
     return isNaN(n) ? 0 : n;
 }
 
+// cambiarPrecioCtta reemplaza el <input> vía innerHTML en cada tecleo y lo vuelve a
+// enfocar: eso dispara un blur "falso" del input viejo antes del focus() del nuevo. Esta
+// bandera le indica a confirmarPrecioNormalizaciones que ese blur es solo del re-render,
+// no que el contratista realmente salió del campo, para no barrer la diferencia a mitad
+// de tecleo.
+let reenfocandoPctta = false;
+
 function cambiarPrecioCtta(input) {
     const idx = Number(input.dataset.idx);
     dc.items[idx].precioCtta = parsePrecio(input.value);
+    reenfocandoPctta = true;
     renderTabla();
     // Restaurar el foco en el mismo input tras el re-render.
     const nuevo = document.querySelector(`.pctta[data-idx="${idx}"]`);
@@ -1004,6 +1015,16 @@ function cambiarPrecioCtta(input) {
         nuevo.focus();
         nuevo.setSelectionRange(nuevo.value.length, nuevo.value.length);
     }
+    reenfocandoPctta = false;
+}
+
+// Al salir del campo de precio contratista de un ítem de NORMALIZACIONES: si el contratista
+// dejó un precio distinto al base, esa diferencia se traslada a SOBRECOSTO NORMALIZACIONES
+// (SCD) y el ítem vuelve a mostrar su precio base — ver barrerSobrecostoNormalizaciones.
+function confirmarPrecioNormalizaciones(input) {
+    if (reenfocandoPctta) return;
+    barrerSobrecostoNormalizaciones();
+    renderTabla();
 }
 
 function cambiarCantidad(input) {
@@ -1419,7 +1440,7 @@ async function generarDCFinalExcel() {
                 // Cañería (instalación) y material Impovar: precio contratista fijo = Renova,
                 // la diferencia siempre es $0 por definición — se deja en blanco en vez de
                 // mostrar un "$0" que no aporta nada (ver precioFijo en renderTabla()).
-                const precioFijo = !it.esLibre && (CATS_CAÑERIA.includes(it.categoria) || it.esImpovar || it.categoria === 'NORMALIZACIONES');
+                const precioFijo = !it.esLibre && (CATS_CAÑERIA.includes(it.categoria) || it.esImpovar);
                 const fila = [
                     oper,
                     String(it.codigo || '').replace(/^0+/, '') || '-',
